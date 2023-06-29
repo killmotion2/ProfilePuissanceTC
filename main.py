@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
+from plotly import graph_objects as go
 from datetime import datetime
 import numpy as np
 from scipy.optimize import curve_fit
