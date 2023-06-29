@@ -1,38 +1,34 @@
-import sklearn.linear_model
 import streamlit as st
 import pandas as pd
-from pandas.errors import EmptyDataError
-import plotly.express as px
 import plotly.graph_objects as go
-import matplotlib.pyplot as plt
-from datetime import datetime, date
+from datetime import datetime
 import numpy as np
-from sklearn.linear_model import LinearRegression
 from scipy.optimize import curve_fit
 from PIL import Image
 
 
-##TODO:Créer la foncitonnalité pour avoir plusieurs graphique sur une même page (posssibilité d'ajouter valeurs statistiques? correlation, )
-#Pour partir l'app: streamlit run "C:\Users\User\Desktop\ProfilePuissance Python\StreamlitV2\main.py"
+##TODO:Créer la foncitonnalité pour avoir plusieurs graphique sur une même page (posssibilité d'ajouter valeurs statistiques? correlation, )--ajouter fonctionnalité d'avoir plusieurs graphique sur un même graphique
+# Pour partir l'app: streamlit run "C:\Users\User\Desktop\ProfilePuissance Python\StreamlitV2\main.py"
 
 def find_data_from_dates(flt_data, slt_title):
     grouped_data = flt_data.groupby('Date')[slt_title].mean().reset_index()
     grouped_data['Improvement'] = grouped_data[slt_title].pct_change() * 100
     grouped_data['Improvement'].fillna(0, inplace=True)
+    grouped_data['Improvement'] = grouped_data['Improvement'].round(0)
 
     fig_combined = go.Figure()
-
     fig_combined.add_trace(go.Scatter(x=grouped_data['Date'], y=grouped_data[slt_title], line=dict(dash='dot')))
+    fig_combined.update_layout(title=f"- {selected_exercice} {slt_title} dans le temps",
+                               xaxis=dict(title='Date des séances'), yaxis=dict(title=slt_title))
 
-    fig_combined.update_layout(xaxis=dict(title='Date des séances'), yaxis=dict(title=slt_title))
-
-    improvement_table = go.Table(header=dict(values=['Date', 'Changement dans la performance (%)']),
-                                cells=dict(values=[grouped_data['Date'], grouped_data['Improvement']]))
-
+    improvement_table = go.Table(
+        header=dict(values=['Date', 'Changement dans la performance (%)']),
+        cells=dict(values=[grouped_data['Date'].dt.strftime('%Y-%m-%d'), grouped_data['Improvement']]),
+    )
     fig_table = go.Figure(data=[improvement_table])
+    fig_table.update_layout(margin=dict(t=0, b=0), width=150)
 
     return fig_combined, fig_table
-
 
 
 def find_data_from_single_date(flt_data, selected_title):
@@ -40,7 +36,8 @@ def find_data_from_single_date(flt_data, selected_title):
     mean_of_variable_per_set = flt_data.groupby('Set order')[selected_title].mean().tolist()
     mean_of_variable_per_set.reverse()
 
-    improvements = [(mean_of_variable_per_set[i] - mean_of_variable_per_set[i - 1]) / mean_of_variable_per_set[i - 1] * 100 if i > 0 else 0 for i in range(len(mean_of_variable_per_set))]
+    improvements = [(mean_of_variable_per_set[i] - mean_of_variable_per_set[i - 1]) / mean_of_variable_per_set[
+        i - 1] * 100 if i > 0 else 0 for i in range(len(mean_of_variable_per_set))]
     improvements = [0 if abs(imp) < 0.001 else imp for imp in improvements]
     improvements = [round(imp, 2) for imp in improvements]
 
@@ -48,7 +45,8 @@ def find_data_from_single_date(flt_data, selected_title):
 
     fig_combined = go.Figure()
     fig_combined.add_trace(go.Scatter(x=each_set, y=mean_of_variable_per_set, line=dict(dash='dot')))
-    fig_combined.update_layout(xaxis=dict(title='# de séries'), yaxis=dict(title=selected_title))
+    fig_combined.update_layout(title=f"- {selected_exercice} {selected_title} à chaque série ",
+                               xaxis=dict(title='# de séries'), yaxis=dict(title=selected_title))
 
     improvement_table = go.Table(header=dict(values=['Set order', 'Changement dans la performance (%)']),
                                  cells=dict(values=[improvement['Set order'], improvement['Improvement']]))
@@ -59,14 +57,16 @@ def find_data_from_single_date(flt_data, selected_title):
     return fig_combined, fig_table
 
 
-
 def equation(x, a, b, c):
-    return a * x**2 + b * x + c
+    return a * x ** 2 + b * x + c
+
 
 def estimer_charge(vitesse_moyenne_x, f0):
-    return (-5.961 * vitesse_moyenne_x**2 - 50.71 * vitesse_moyenne_x + 117.0)/100*f0
+    return (-5.961 * vitesse_moyenne_x ** 2 - 50.71 * vitesse_moyenne_x + 117.0) / 100 * f0
+
 
 def afficher_graphique_FV():
+    col1, col2 = st.columns([3, 1])
     flt_data = df[(df['User'] == selected_user) & (df['Exercise'] == selected_exercice)]
     F0 = flt_data['Estimated 1RM [lb]'].unique().max()
     each_set = flt_data['Set order'].unique()
@@ -77,10 +77,12 @@ def afficher_graphique_FV():
 
     nouvelles_vitesses = [0.3, 0.5, 0.7]
     nouvelles_charges = [estimer_charge(vitesse, F0) for vitesse in nouvelles_vitesses]
-    if st.checkbox("Ajouter les valeurs estimées dans la prédiction de la courbe"):
-        vit_moyenne_x.extend(nouvelles_vitesses)
-        force_moyenne_y.extend(nouvelles_charges)
-        fig.add_trace(go.Scatter(x=nouvelles_vitesses, y=nouvelles_charges, mode='markers', name="Valeurs estimées"))
+    with col2:
+        if st.checkbox("Ajouter les valeurs estimées dans la prédiction de la courbe"):
+            vit_moyenne_x.extend(nouvelles_vitesses)
+            force_moyenne_y.extend(nouvelles_charges)
+            fig.add_trace(
+                go.Scatter(x=nouvelles_vitesses, y=nouvelles_charges, mode='markers', name="Valeurs estimées"))
 
     popt, pcov = curve_fit(equation, vit_moyenne_x, force_moyenne_y)
     a_opt, b_opt, c_opt = popt
@@ -115,7 +117,8 @@ def afficher_graphique_FV():
         yaxis=dict(gridcolor='lightgray')
     )
 
-    st.plotly_chart(fig)
+    with col1:
+        st.plotly_chart(fig)
 
     exercice_UB = ["Bench", "Pull", "Row", "Press"]
     exercice_LB = ["Squat", "Deadlift", "Lunge", "Fente"]
@@ -123,9 +126,10 @@ def afficher_graphique_FV():
     is_UB_exercice = any(exo in selected_exercice for exo in exercice_UB)
     is_LB_exercice = any(exo in selected_exercice for exo in exercice_LB)
 
-    training_type = st.selectbox("Type d'entraînement",
-                                 ["Force absolue", "Force accélération", "Force-vitesse", "Vitesse-force",
-                                  "Vitesse absolue"])
+    with col2:
+        training_type = st.selectbox("Type d'entraînement",
+                                     ["Force absolue", "Force accélération", "Force-vitesse", "Vitesse-force",
+                                      "Vitesse absolue"])
 
     v_min, v_max = 0, 0
     if is_UB_exercice:
@@ -168,53 +172,41 @@ def afficher_graphique_FV():
     estimated_load_min = max(0, estimated_load_min)
     estimated_load_max = max(0, estimated_load_max)
 
-    st.write("Intervalles de vitesses", v_min, "-", v_max, "m/s")
-    st.write("Intervalles de charges:", estimated_load_max, "-", estimated_load_min, "lbs")
+    with col2:
+        st.write("Intervalles de vitesses", v_min, "-", v_max, "m/s")
+        st.write("Intervalles de charges:", estimated_load_max, "-", estimated_load_min, "lbs")
 
 
-
-def analyze_data(user,exercise, start_date, end_date):
+def analyse_data(user, exercise, start_date, end_date):
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
-    filtered_data = df[(df['User'] == user) & (df['Date'].between(start_date, end_date))& (df['Exercise'] == exercise)]
+    filtered_data = df[(df['User'] == user) & (df['Date'].between(start_date, end_date)) & (df['Exercise'] == exercise)]
+
     if analyzing_multiple_date:
-        fig, tabl = find_data_from_dates(filtered_data,selected_title)
-        st.header(f"- {selected_title} dans le temps")
+        fig, tabl = find_data_from_dates(filtered_data, selected_title)
     else:
         fig, tabl = find_data_from_single_date(filtered_data, selected_title)
-        st.header(f"- {selected_title} à chaque série")
-    st.plotly_chart(fig)
-    st.plotly_chart(tabl)
 
-
-
-
-
-
+    return fig, tabl
 
 
 ##VARIABLES IMPORTANTES
 if 'lecture_courbe_FV' not in st.session_state:
-        st.session_state.lecture_courbe_FV = False
+    st.session_state.lecture_courbe_FV = False
+if 'graphs' not in st.session_state:
+    st.session_state.graphs = []
 
 analyzing = False
 analyzing_multiple_date = False
 
-
 ##ILLUSTRATION INITIALE
-st.set_page_config(page_title="Analyse profile athlètes de Tennis Canada", page_icon= ":bar_chart:", layout="wide")
+st.set_page_config(page_title="Analyse profile athlètes de Tennis Canada", page_icon=":bar_chart:", layout="wide")
 emplacement_logo = st.empty()
 main_title = st.empty()
-
-
-
-
-
 
 ##IMPORTATION DES DONNÉES/MAIN LOOP
 
 upload_file = st.sidebar.file_uploader("Pick a TSV file", type='tsv')
-
 
 if upload_file is not None:
     emplacement_logo.empty()
@@ -227,22 +219,28 @@ if upload_file is not None:
             st.dataframe(df)
         titres = df.columns.tolist()
 
-
         selected_user = st.sidebar.selectbox('Sélectionner un utilisateur', df['User'].unique())
 
         exp_analyse_generale = st.sidebar.button("Analyse générale")
         if exp_analyse_generale.__bool__():
 
             col1, col2, col3 = st.columns(3)
-            start_date = datetime.combine(pd.to_datetime(df[(df['User'] == selected_user)]['Date'].unique().min()),datetime.min.time()).date()
-            end_date = datetime.combine(pd.to_datetime(df[(df['User'] == selected_user)]['Date'].unique().max()),datetime.max.time()).date()
+            start_date = datetime.combine(pd.to_datetime(df[(df['User'] == selected_user)]['Date'].unique().min()),
+                                          datetime.min.time()).date()
+            end_date = datetime.combine(pd.to_datetime(df[(df['User'] == selected_user)]['Date'].unique().max()),
+                                        datetime.max.time()).date()
             start_date = pd.to_datetime(start_date)
             end_date = pd.to_datetime(end_date)
 
-            filtered_data_Hexbar = df[(df['User'] == selected_user) & (df['Date'].between(start_date, end_date)) & (df['Exercise'] == "Deadlift Hex bar")]
-            #filtered_data_Db_press = df[(df['User'] == selected_user) & (df['Date'].between(start_date, end_date)) & (df['Exercise'] == "Flywheel row")]
-            filtered_data_Flywheel_row_R = df[(df['User'] == selected_user) & (df['Date'].between(start_date, end_date)) & (df['Exercise'] == "Flywheel row (R)")]
-            filtered_data_Flywheel_row_L = df[(df['User'] == selected_user) & (df['Date'].between(start_date, end_date)) & (df['Exercise'] == "Flywheel row (L)")]
+            filtered_data_Hexbar = df[(df['User'] == selected_user) & (df['Date'].between(start_date, end_date)) & (
+                    df['Exercise'] == "Deadlift Hex bar")]
+            # filtered_data_Db_press = df[(df['User'] == selected_user) & (df['Date'].between(start_date, end_date)) & (df['Exercise'] == "Flywheel row")]
+            filtered_data_Flywheel_row_R = df[
+                (df['User'] == selected_user) & (df['Date'].between(start_date, end_date)) & (
+                        df['Exercise'] == "Flywheel row (R)")]
+            filtered_data_Flywheel_row_L = df[
+                (df['User'] == selected_user) & (df['Date'].between(start_date, end_date)) & (
+                        df['Exercise'] == "Flywheel row (L)")]
 
             with col1:
                 st.header("RFD (N/s) Hexbar DL")
@@ -260,43 +258,66 @@ if upload_file is not None:
 
                 st.plotly_chart(fig_combined)
 
-
-        exp_analyse_detaille = st.sidebar.expander("Analyse détaillé",expanded=False)
+        exp_analyse_detaille = st.sidebar.expander("Analyse détaillé", expanded=False)
 
         if exp_analyse_detaille.expanded:
+
+            col1, col2 = st.columns([3, 1])
             selected_exercice = exp_analyse_detaille.selectbox('Sélectionner un exercice',
                                                                df[(df['User'] == selected_user)]['Exercise'].unique())
             sorted(titres)
 
             # Le reste du contenu à l'intérieur de l'expander
             excluded_titles = ['Date', 'Time', 'User', 'Exercise', 'Set order', 'Rep order']
-            selected_title = exp_analyse_detaille.selectbox("Sélectionnez une variable à analyser",[title for title in titres if title not in excluded_titles and df[(df['User'] == selected_user) & ( df['Exercise'] == selected_exercice)][title].notnull().any()])
+            selected_title = exp_analyse_detaille.selectbox("Sélectionnez une variable à analyser",
+                                                            [title for title in titres if
+                                                             title not in excluded_titles and df[
+                                                                 (df['User'] == selected_user) & (
+                                                                         df['Exercise'] == selected_exercice)][
+                                                                 title].notnull().any()])
 
-            if exp_analyse_detaille.button("Courbe force-vitesse", key="courbe_fv"):
-                st.session_state.lecture_courbe_FV = not st.session_state.lecture_courbe_FV
-
-            if st.session_state.lecture_courbe_FV:
+            if "Flywheel" in selected_exercice or "jump" in selected_exercice:
+                exp_analyse_detaille.checkbox("Afficher courbe force-vitesse", disabled=True)
+            elif exp_analyse_detaille.checkbox("Afficher courbe force-vitesse", disabled=False):
                 afficher_graphique_FV()
-
 
             if exp_analyse_detaille.checkbox("Analyse de plusieurs séances?"):
                 analyzing_multiple_date = True
-                selected_start_date = exp_analyse_detaille.selectbox('Date de début',options=[date.strftime('%Y-%m-%d') for date in df[(df['User'] == selected_user) & (df['Exercise'] == selected_exercice)]['Date'].unique()])
-                min_end_date = df[(df['User'] == selected_user) & (df['Exercise'] == selected_exercice) & (df['Date'] >= pd.to_datetime(selected_start_date))]['Date'].min()
-                selected_end_date = exp_analyse_detaille.selectbox('Date de fin',options=[date.strftime('%Y-%m-%d') for date in df[(df['User'] == selected_user) & (df['Exercise'] == selected_exercice) & (df['Date'] >= min_end_date)]['Date'].unique()])
+                selected_start_date = exp_analyse_detaille.selectbox('Date de début',
+                                                                     options=[date.strftime('%Y-%m-%d') for date in df[
+                                                                         (df['User'] == selected_user) & (df['Exercise'] == selected_exercice)][
+                                                                         'Date'].unique()])
+                min_end_date = df[(df['User'] == selected_user) & (df['Exercise'] == selected_exercice) & (
+                        df['Date'] >= pd.to_datetime(selected_start_date))]['Date'].min()
+                selected_end_date = exp_analyse_detaille.selectbox('Date de fin',options=[date.strftime('%Y-%m-%d') for date in df[
+                                                                       (df['User'] == selected_user) & (df['Exercise'] == selected_exercice) & (df['Date'] >= min_end_date)][
+                                                                       'Date'].unique()])
                 start_date = datetime.combine(pd.to_datetime(selected_start_date), datetime.min.time()).date()
                 end_date = datetime.combine(pd.to_datetime(selected_end_date), datetime.max.time()).date()
-                analyze_data(selected_user, selected_exercice, start_date, end_date)
             else:
                 analyzing_multiple_date = False
-                selected_date_single = exp_analyse_detaille.selectbox('Date de début', options=[date.strftime('%Y-%m-%d') for date in df[(df['User'] == selected_user) & (df['Exercise'] == selected_exercice)]['Date'].unique()])
+                selected_date_single = exp_analyse_detaille.selectbox('Date de début',
+                                                                      options=[date.strftime('%Y-%m-%d') for date in df[
+                                                                          (df['User'] == selected_user) & (df['Exercise'] == selected_exercice)][
+                                                                          'Date'].unique()])
                 end_date = start_date = datetime.combine(pd.to_datetime(selected_date_single),
                                                          datetime.max.time()).date()
-                analyze_data(selected_user, selected_exercice, start_date, end_date)
+            if exp_analyse_detaille.button("Ajouter un graphique"):
+                fig, tabl = analyse_data(selected_user, selected_exercice, start_date, end_date)
+                st.session_state.graphs.append((fig, tabl))
 
+            for i, fig in enumerate(st.session_state.graphs):
+                with exp_analyse_detaille:
+                    graph_title = f"Graphique {i + 1}"
+                    if st.button(f"{graph_title}     X"):
+                        st.session_state.graphs.pop(i)
+                        break
 
-
-
+            for g in st.session_state.graphs:
+                with col1:
+                    st.plotly_chart(g[0])
+                with col2:
+                    st.plotly_chart(g[1])
     except pd.errors.EmptyDataError:
         st.error("Le fichier est vide ou ne contient pas de colonnes.")
 
