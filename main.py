@@ -116,7 +116,7 @@ def find_data_from_dates(flt_data, slt_title, user_name):
         ])
     ))
 
-    improvement_table.update_layout(margin=dict(t=0, b=0),width=300)
+    improvement_table.update_layout(margin=dict(t=0, b=0))
 
     return fig_combined, improvement_table
 
