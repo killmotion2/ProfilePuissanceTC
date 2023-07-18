@@ -616,7 +616,7 @@ if upload_file is not None:
         st.error("Le fichier est vide ou ne contient pas de colonnes.")
 
 else:
-    logo = Image.open("C:/Users/User/Desktop/ProfilePuissance Python/Images Streamlit/Logo_Tennis_Canada.png")
-    emplacement_logo.image(logo, width=100)
+    #logo = Image.open("C:/Users/User/Desktop/ProfilePuissance Python/Images Streamlit/Logo_Tennis_Canada.png")
+    #emplacement_logo.image(logo, width=100)
     main_title.header("Analyse du profile de puissance des athlètes de tennis")
     st.sidebar.warning("Veuillez télécharger un fichier TSV valide.")
