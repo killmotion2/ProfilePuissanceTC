@@ -1,68 +1,130 @@
 import string
 
+import plotly.tools
+import re
 import streamlit as st
 import pandas as pd
 from plotly import graph_objects as go
 from plotly.subplots import make_subplots
+import plotly.colors as pc
 from datetime import datetime
 import numpy as np
 from scipy import stats
+
 from scipy.optimize import curve_fit
 from PIL import Image
 
 
-##TODO: ajouter RFD dans graphique comparatif, changer graphique évolution avec une présentation de plusieurs données dans le temps
+##TODO: Comment puis-je rendre l'analyse d'une séance plus intéressante?, est-ce que c'est possible d'avoir statistqiue pour comparer les données (courbe une et l'autre)??, régler problème de template pour courbe FV simple
 # Pour partir l'app: streamlit run "C:\Users\User\Desktop\ProfilePuissance Python\StreamlitV2\main.py"
 
-def find_data_from_dates(flt_data, slt_title):
-    grouped_data_raw = flt_data.groupby('Date')[slt_title]
-    grouped_data = flt_data.groupby('Date')[slt_title].mean().reset_index()
-    grouped_data['Improvement'] = grouped_data[slt_title].pct_change() * 100
-    grouped_data['Improvement'].fillna(0, inplace=True)
-    grouped_data['Improvement'] = grouped_data['Improvement'].round(2)
+def create_acronym(name):
+    words = name.split()  # Divise le nom en mots
+    acronym = words[0][0].upper()  # Première lettre du prénom en majuscule
+    for word in words[1:]:
+        acronym += f". {word[0].upper()}"  # Ajout de la première lettre des autres mots en majuscule
+    return acronym
 
+
+def find_unit_of_title(slt_title):
+    # Recherche le motif '[x]' dans le titre
+    match = re.search(r'\[(.*?)]', slt_title)
+    if match:
+        # Si un motif est trouvé, renvoie le texte entre crochets (l'unité)
+        unit = match.group(1)
+        return unit
+    else:
+        # Si aucun motif n'est trouvé, renvoie une valeur par défaut ou None
+        return None
+def find_Cohen_interpretation(effect_size, ET):
+    if effect_size < 0.2 * ET:
+        effect_size_title = "Sans intérêt"
+    elif 0.2 * ET <= effect_size < 0.5 * ET:
+        effect_size_title = "Faible"
+    elif 0.5 * ET <= effect_size < 0.8 * ET:
+        effect_size_title = "Modéré"
+    elif effect_size > 0.8 * ET:
+        effect_size_title = "Grand"
+    else:
+        effect_size_title = ""
+    return effect_size_title
+
+def find_data_from_dates(flt_data, slt_title, user_name):
+    unit_of_title = find_unit_of_title(slt_title)
+    #Valeurs de la moyenne de la variable choisi, regroupé par chaque date et chaque série
+    grouped_data = flt_data.groupby(['Set order', 'Date'])[slt_title].mean().reset_index()
+    # Valeurs de chaque charge maximale utilisée pour chaque date et chaque série
+    load_date_set = flt_data.groupby(['Date', 'Set order'])['Load [lb]'].max().reset_index()
+
+    load_dict = load_date_set.set_index(['Date', 'Set order'])['Load [lb]'].to_dict()
+    grouped_data['Load [lb]'] = grouped_data.apply(lambda row: load_dict.get((row['Date'], row['Set order'])), axis=1)
+    grouped_data = grouped_data.sort_values(by='Load [lb]', ascending=True)
+
+    #Valeurs des améliorations de chaque charge (Différence entre les deux meilleurs performance de cette charge)
+    grouped_by_charge = grouped_data.groupby('Load [lb]')
+    improvement_values = []
+    perf_differences = []
     effect_sizes = []
+    SWC = []
     effect_size_titles = []
-    effect_sizes.append(0)
-    effect_size_titles.append("")
-    for i in range(1, len(grouped_data)):
-        m1 = grouped_data[slt_title][i - 1]
-        m2 = grouped_data[slt_title][i]
-        s = grouped_data_raw.get_group(grouped_data['Date'][i]).std()
-        if s != 0:
-            effect_size = abs(m1 - m2) / s
+
+
+    for _, group in grouped_by_charge:
+        if len(group) > 1:
+            # Utilisez nlargest(2) pour obtenir les deux meilleures performances pour ce groupe
+            top_2_performances = group.nlargest(2, slt_title)[slt_title].values
+            # Calculez la différence entre les deux meilleures performances
+            perf_diff = top_2_performances[0] - top_2_performances[1]
+            improvement = round(perf_diff/top_2_performances[1] *100, 2)
+
+            s = group[slt_title].std()
+            SWC.append(round(s*0.2,2))
+            effect_size = perf_diff
+            effect_sizes.append(round(effect_size,2))
+            effect_size_titles.append(find_Cohen_interpretation(effect_size,s))
         else:
-            effect_size = 0  # Valeur par défaut lorsque l'écart-type est nul
+            improvement = 'Pas assez de valeurs'
+            perf_diff = 0
+            effect_sizes.append("-")
+            effect_size_titles.append("-")
+            SWC.append("-")
+        improvement_values.append(improvement)
+        perf_differences.append(round(perf_diff,2))
 
-        if effect_size < 0.2 * s:
-            effect_size_title = "Sans intérêt"
-        elif 0.2 * s <= effect_size < 0.5 * s:
-            effect_size_title = "Faible"
-        elif 0.5 * s <= effect_size < 0.8 * s:
-            effect_size_title = "Modéré"
-        elif effect_size > 0.8 * s:
-            effect_size_title = "Grand"
-        else:
-            effect_size_title = ""
+    perf_changes_combined = [f"{pourcentage} ({original_unit})" for pourcentage, original_unit in
+                            zip(improvement_values, perf_differences)]
 
-        effect_sizes.append(effect_size)
-        effect_size_titles.append(effect_size_title)
+    hovertemplate = 'Date: %{customdata|%Y-%m-%d}<br>#séries: %{text}<br>Charge: %{x}<br>' + slt_title + ': %{y}<extra></extra>'
 
-    fig_combined = go.Figure(data=go.Scatter(x=grouped_data['Date'], y=grouped_data[slt_title], line=dict(dash='dot'),
-                                             name=f"{selected_title}"))
-    fig_combined.update_layout(title=f"{selected_exercice}, {slt_title} dans le temps",
-                               xaxis=dict(title='Date des séances'), yaxis=dict(title=slt_title))
+    fig_combined = go.Figure()
+    fig_combined.add_trace(go.Scatter(
+        x=grouped_data['Load [lb]'],
+        y=grouped_data[slt_title],
+        mode='markers',
+        hovertemplate=hovertemplate,
+        text=grouped_data['Set order'],
+        customdata=grouped_data['Date'],
+    ))
+    fig_combined.update_layout(
+        title=f"{user_name}, {selected_exercice}, {slt_title}",
+        xaxis_title='Charge [lb]',
+        yaxis_title=slt_title,
+    )
+
 
     improvement_table = go.Figure(data=go.Table(
-        header=dict(values=['Date', 'Changement dans la performance (%)', 'Taille de Cohen']),
-        cells=dict(values=[grouped_data['Date'].dt.strftime('%Y-%m-%d'), grouped_data['Improvement'],
-                           [f"{np.round(size, 2)} ({title})" for size, title in
-                            zip(effect_sizes, effect_size_titles)]]),
+        header=dict(values=['Charge (lb)', f"Changement dans la performance (%,({unit_of_title}))", f"Le plut petit changement significatif (SWC) ({unit_of_title})", 'Taille de Cohen']),
+        cells=dict(values=[
+            grouped_data['Load [lb]'].unique(),
+            perf_changes_combined,
+            SWC,
+            effect_size_titles
+        ])
     ))
-    improvement_table.update_layout(margin=dict(t=0, b=0), width=200)
+
+    improvement_table.update_layout(margin=dict(t=0, b=0),width=300)
 
     return fig_combined, improvement_table
-
 
 def find_data_from_single_date(flt_data, selected_title):
     each_set = flt_data['Set order'].unique()
@@ -102,19 +164,26 @@ class CourbeForceVitesse:
         self.figure = None
         self.popt = None
         self.F0 = None
+        self.trend_x = None
+        self.trend_y = None
         self.is_type_of_exercice = None
         self.selectbox = "Force absolue"
         self.string_vitesse_maxmin = None
         self.string_repetition_maxmin = None
         self.string_load_maxmin = None
+        self.area_chart = None
+        self.is_comparaison_figure = None
 
     def show_graph(self):
-        with col1:
-            st.plotly_chart(self.figure)
+        for trace in self.figure.data:
+            trace.visible = True
+        st.plotly_chart(self.figure)
 
     def show_graphs_info(self):
-        with col2:
-            st.write(self.string_load_maxmin, self.string_vitesse_maxmin, self.string_repetition_maxmin)
+        if self.string_load_maxmin or self.string_vitesse_maxmin or self.string_repetition_maxmin != None:
+            st.write(self.string_load_maxmin)
+            st.write(self.string_vitesse_maxmin)
+            st.write(self.string_repetition_maxmin)
 
     def equation(self, x, a, b, c):
         return a * x ** 2 + b * x + c
@@ -131,7 +200,8 @@ class CourbeForceVitesse:
     def create_fv_graph(self, checkbox_show_estimated_data):
         self.F0 = self.flt_data['Estimated 1RM [lb]'].unique().max()
         each_set = self.flt_data['Set order'].unique()
-        force_moyenne_y = [self.F0] + [self.flt_data[self.flt_data['Set order'] == set]["Load [lb]"].max() for set in each_set]
+        force_moyenne_y = [self.F0] + [self.flt_data[self.flt_data['Set order'] == set]["Load [lb]"].max() for set in
+                                       each_set]
 
         exercice_UB_pull = ["Pull", "Row", "Tirade"]
         exercice_UB_push = ["Bench", "Press"]
@@ -144,10 +214,13 @@ class CourbeForceVitesse:
         is_LB_exercice_push = any(exo in self.selected_exercice.lower() for exo in exercice_LB_push)
         self.is_type_of_exercice = [is_UB_exercice_pull, is_UB_exercice_push, is_LB_exercice_pull, is_LB_exercice_push]
 
-        vit_moyenne_x = [0.0] + [self.flt_data[self.flt_data['Set order'] == set]["Avg. velocity [m/s]"].mean() for set in
+        vit_moyenne_x = [0.0] + [self.flt_data[self.flt_data['Set order'] == set]["Avg. velocity [m/s]"].mean() for set
+                                 in
                                  each_set]
 
-        figFV = go.Figure(data=go.Scatter(x=vit_moyenne_x, y=force_moyenne_y, mode='markers', name="Valeurs existantes"))
+        figFV = go.Figure(
+            data=go.Scatter(x=vit_moyenne_x, y=force_moyenne_y, mode='markers',
+                            name=f"Val.exist., {create_acronym(self.selected_user)}, {self.selected_exercice}"))
 
         nouvelles_vitesses = [0.3, 0.5, 0.7]
         nouvelles_charges = [0.0]
@@ -164,24 +237,29 @@ class CourbeForceVitesse:
             for nc in nouvelles_charges:
                 force_moyenne_y.append(nc)
             figFV.add_trace(
-                go.Scatter(x=nouvelles_vitesses, y=nouvelles_charges, mode='markers', name="Valeurs estimées"))
+                go.Scatter(x=nouvelles_vitesses, y=nouvelles_charges, mode='markers',
+                           name=f"Val.estim., {create_acronym(self.selected_user)}, {self.selected_exercice}"))
 
         popt = curve_fit(self.equation, vit_moyenne_x, force_moyenne_y)
         self.popt = popt[0]
         a_opt, b_opt, c_opt = popt[0]
 
-        trend_x = np.linspace(min(vit_moyenne_x), max(vit_moyenne_x), 100)
-        trend_y = self.equation(trend_x, *popt[0])
+        self.trend_x = np.linspace(min(vit_moyenne_x), 2, 100)
+        self.trend_y = self.equation(self.trend_x, *popt[0])
 
-        figFV.add_trace(go.Scatter(x=trend_x, y=trend_y, mode='lines', name='Courbe de tendance'))
+        positive_indices = []
+        for i, y in enumerate(self.trend_y):
+            if y >= 0:
+                positive_indices.append(i)
+        self.trend_x = [self.trend_x[i] for i in positive_indices]
+        self.trend_y = [self.trend_y[i] for i in positive_indices]
+
+        figFV.add_trace(go.Scatter(x=self.trend_x, y=self.trend_y, mode='lines',
+                                   name=f"Courbe FV ({self.date_debut.date()}/{self.date_fin.date()})"))
 
 
         vit_moyenne_x = np.array(vit_moyenne_x)
         force_moyenne_y = np.array(force_moyenne_y)
-        #vit_moyenne_x = np.array(
-        #    [0] + [flt_data[flt_data['Set order'] == set]["Avg. velocity [m/s]"].mean() for set in each_set])
-        #force_moyenne_y = np.array(
-        #    [self.F0] + [flt_data[flt_data['Set order'] == set]["Load [lb]"].mean() for set in each_set])
 
         equation_text = f"Eq : {a_opt:.2f}x^2 + {b_opt:.2f}x + {c_opt:.2f}"
         figFV.add_annotation(x=0.85, y=0.9, xref='paper', yref='paper', text=equation_text, showarrow=False)
@@ -193,70 +271,124 @@ class CourbeForceVitesse:
 
         r_squared_text = f"R2 : {r_squared:.2f}"
         figFV.add_annotation(x=0.85, y=0.85, xref='paper', yref='paper', text=r_squared_text, showarrow=False)
+        figFV.update_traces(hovertemplate='Vitesse: %{x:.2f} m/s <br> Charges: %{y:.2f} lbs')
 
         figFV.update_layout(
             xaxis_title='Vitesse moyenne (m/s)',
-            yaxis_title='Force moyenne (lb)',
+            yaxis_title='Charge (lb)',
             title='Relation Force-Vitesse',
             showlegend=True,
             xaxis=dict(gridcolor='lightgray'),
-            yaxis=dict(gridcolor='lightgray')
+            yaxis=dict(gridcolor='lightgray', rangemode='nonnegative'),
+            hovermode="x unified"
         )
         self.figure = figFV
 
-    def create_fv_zone_infos(self):
-        a_opt, b_opt, c_opt = self.popt
+    def create_fv_zone_infos(self, fv_selectbox_choice):
+        if not self.is_comparaison_figure:
+            a_opt, b_opt, c_opt = self.popt
 
-        v_min, v_max = 0, 0
-        if self.is_type_of_exercice[0] or self.is_type_of_exercice[1]:
-            if fv_selectbox_choice == "Force absolue":
-                v_min, v_max = 0.15, 0.5
-            elif fv_selectbox_choice == "Force accélération":
-                v_min, v_max = 0.5, 0.75
-            elif fv_selectbox_choice == "Force-vitesse":
-                v_min, v_max = 0.75, 1
-            elif fv_selectbox_choice == "Vitesse-force":
-                v_min, v_max = 1, 1.3
-            elif fv_selectbox_choice == "Vitesse absolue":
-                v_min, v_max = 1.3, 1.5
-        elif self.is_type_of_exercice[2] or self.is_type_of_exercice[3]:
-            if fv_selectbox_choice == "Force absolue":
-                v_min, v_max = 0.3, 0.5
-            elif fv_selectbox_choice == "Force accélération":
-                v_min, v_max = 0.5, 0.75
-            elif fv_selectbox_choice == "Force-vitesse":
-                v_min, v_max = 0.75, 1
-            elif fv_selectbox_choice == "Vitesse-force":
-                v_min, v_max = 1, 1.5
-            elif fv_selectbox_choice == "Vitesse absolue":
-                v_min, v_max = 1.3, 1.8
+            v_min, v_max = 0, 0
+            if self.is_type_of_exercice[0] or self.is_type_of_exercice[1]:
+                if fv_selectbox_choice == "Force absolue":
+                    v_min, v_max = 0.15, 0.5
+                elif fv_selectbox_choice == "Force accélération":
+                    v_min, v_max = 0.5, 0.75
+                elif fv_selectbox_choice == "Force-vitesse":
+                    v_min, v_max = 0.75, 1
+                elif fv_selectbox_choice == "Vitesse-force":
+                    v_min, v_max = 1, 1.3
+                elif fv_selectbox_choice == "Vitesse absolue":
+                    v_min, v_max = 1.3, 1.5
+            elif self.is_type_of_exercice[2] or self.is_type_of_exercice[3]:
+                if fv_selectbox_choice == "Force absolue":
+                    v_min, v_max = 0.3, 0.5
+                elif fv_selectbox_choice == "Force accélération":
+                    v_min, v_max = 0.5, 0.75
+                elif fv_selectbox_choice == "Force-vitesse":
+                    v_min, v_max = 0.75, 1
+                elif fv_selectbox_choice == "Vitesse-force":
+                    v_min, v_max = 1, 1.5
+                elif fv_selectbox_choice == "Vitesse absolue":
+                    v_min, v_max = 1.3, 1.8
+            else:
+                if fv_selectbox_choice == "Force absolue":
+                    v_min, v_max = 0.3, 0.5
+                elif fv_selectbox_choice == "Force accélération":
+                    v_min, v_max = 0.5, 0.75
+                elif fv_selectbox_choice == "Force-vitesse":
+                    v_min, v_max = 0.75, 1
+                elif fv_selectbox_choice == "Vitesse-force":
+                    v_min, v_max = 1, 1.5
+                elif fv_selectbox_choice == "Vitesse absolue":
+                    v_min, v_max = 1.3, 1.8
+
+            estimated_load_max = int(round(self.equation(v_min, a_opt, b_opt, c_opt)))
+            estimated_load_min = int(round(self.equation(v_max, a_opt, b_opt, c_opt)))
+
+            estimated_load_min = max(0, estimated_load_min)
+            estimated_load_max = max(0, estimated_load_max)
+
+            reps_min = int(round((1.0278 * self.F0 - estimated_load_min) / (0.0278 * self.F0)))
+            if reps_min < 0: reps_min = 0
+            reps_max = int(round((1.0278 * self.F0 - estimated_load_max) / (0.0278 * self.F0)))
+            if reps_max < 0: reps_max = 0
+
+            self.string_vitesse_maxmin = f"Intervalles de vitesses : {v_min} - {v_max} m/s"
+            self.string_load_maxmin = f"Intervalles de charges : {estimated_load_max} - {estimated_load_min} lbs"
+            self.string_repetition_maxmin = f"Répétitions avant l'échec : {reps_max} - {reps_min}"
         else:
-            if fv_selectbox_choice == "Force absolue":
-                v_min, v_max = 0.3, 0.5
-            elif fv_selectbox_choice == "Force accélération":
-                v_min, v_max = 0.5, 0.75
-            elif fv_selectbox_choice == "Force-vitesse":
-                v_min, v_max = 0.75, 1
-            elif fv_selectbox_choice == "Vitesse-force":
-                v_min, v_max = 1, 1.5
-            elif fv_selectbox_choice == "Vitesse absolue":
-                v_min, v_max = 1.3, 1.8
+            self.string_vitesse_maxmin = self.string_repetition_maxmin = self.string_load_maxmin = None
 
-        estimated_load_max = int(round(self.equation(v_min, a_opt, b_opt, c_opt)))
-        estimated_load_min = int(round(self.equation(v_max, a_opt, b_opt, c_opt)))
+    def add_curve(self, graphs2):
+        for trace in graphs2.figure.data:
+            new_trace = go.Scatter(
+                x=trace.x,
+                y=trace.y,
+                mode=trace.mode,
+                name=trace.name,
+                hovertemplate=f'Vitesse: %{{x:.2f}} m/s <br> Charges: %{{y:.2f}} lbs'
+            )
+            self.figure.add_trace(new_trace)
 
-        estimated_load_min = max(0, estimated_load_min)
-        estimated_load_max = max(0, estimated_load_max)
+        if len(self.figure.data) >= 2:
+            self.figure.layout.annotations = []
+            x_values = self.trend_x
+            y1_values = self.trend_y
+            y2_values = graphs2.trend_y
 
-        reps_min = int(round((1.0278 * self.F0 - estimated_load_min) / (0.0278 * self.F0)))
-        if reps_min < 0: reps_min = 0
-        reps_max = int(round((1.0278 * self.F0 - estimated_load_max) / (0.0278 * self.F0)))
-        if reps_max < 0: reps_max = 0
+            area_trace = go.Scatter(
+                x=x_values,
+                y=[abs(y1 - y2) for y1, y2 in zip(y1_values, y2_values)],
+                mode='lines',
+                fill='tozeroy',
+                name='Différence',
+                hovertemplate= 'Différence: %{y:.2f} lbs <br> Vitesse: %{x:.2f} m/s'
+            )
 
-        self.string_vitesse_maxmin = f"Intervalles de vitesses : {v_min} - {v_max} m/s"
-        self.string_load_maxmin = f"Intervalles de charges : {estimated_load_max} - {estimated_load_min} lbs"
-        self.string_repetition_maxmin = f"Nombre de répétitions recommandé : {reps_max} - {reps_min}"
+            self.area_chart = area_trace
 
+            # Créer un subplot avec deux lignes et une colonne
+            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1)
+
+            # Ajouter les courbes dans le premier graphique
+            for trace in self.figure.data:
+                fig.add_trace(trace, row=1, col=1)
+
+            # Ajouter l'area_chart dans le deuxième graphique
+            fig.add_trace(area_trace, row=2, col=1)
+
+            # Définir les titres et les étiquettes des axes pour chaque graphique
+            fig.update_layout(
+                title='Relation Force-vitesse',
+                xaxis=dict(title='Vitesse (m/s)', title_standoff=10,side='bottom'),
+                yaxis=dict(title='Charges (lbs)', domain=[0.16, 1.0], rangemode='nonnegative'),
+                yaxis2=dict(title='Diff. de perf. (lbs)', domain=[0.0, 0.15], rangemode='nonnegative')
+            )
+            self.figure = fig
+
+        graphs2.string_vitesse_maxmin = graphs2.string_load_maxmin = graphs2.string_repetition_maxmin = None
+        self.string_vitesse_maxmin = self.string_load_maxmin = self.string_repetition_maxmin = None
 
 
 def analyse_data(user, exercise, start_date, end_date):
@@ -265,7 +397,7 @@ def analyse_data(user, exercise, start_date, end_date):
     filtered_data = df[(df['User'] == user) & (df['Date'].between(start_date, end_date)) & (df['Exercise'] == exercise)]
 
     if analyzing_multiple_date:
-        fig, tabl = find_data_from_dates(filtered_data, selected_title)
+        fig, tabl = find_data_from_dates(filtered_data, selected_title,user)
     else:
         fig, tabl = find_data_from_single_date(filtered_data, selected_title)
 
@@ -308,16 +440,30 @@ def add_figure_and_update_table():
 
         # Mettre à jour la liste des figures dans la session
         st.session_state.graphs_of_variables[-1][0] = new_figure
-    # return original_fig
 
 
 def graph_manager(graphs_list, expander):
     for i, fig in enumerate(graphs_list):
         with expander:
             graph_title = f"Graphique {i + 1}"
-            if st.button(f"{graph_title}     X"):
+            if len(graphs_list) < 1:
+                bt = expander.empty()
+            else:
+                bt = expander.button(f"{graph_title}     X")
+            if bt.__bool__():
                 graphs_list.pop(i)
-                break
+                st.experimental_rerun()
+
+
+def show_all_graphs_in_loop(selectbox_choice):
+    for gfv in st.session_state.graphs_of_fv:
+        if selectbox_choice != st.session_state.previous_selectbox_choice:
+            gfv.create_fv_zone_infos(selectbox_choice)
+            st.session_state.previous_selectbox_choice = selectbox_choice
+        with col1:
+            gfv.show_graph()
+        with col2:
+            gfv.show_graphs_info()
 
 
 ##VARIABLES IMPORTANTES
@@ -327,8 +473,9 @@ if 'graphs_of_variables' not in st.session_state:
     st.session_state.graphs_of_variables = []
 if 'graphs_of_fv' not in st.session_state:
     st.session_state.graphs_of_fv = []
+if 'previous_selectbox_choice' not in st.session_state:
+    st.session_state.previous_selectbox_choice = ""
 
-analyzing = False
 analyzing_multiple_date = False
 checkbox_show_estimated_data = False
 
@@ -351,11 +498,12 @@ if upload_file is not None:
         if st.sidebar.checkbox("Tableau origine"):
             st.dataframe(df)
         titres = df.columns.tolist()
-        col1, col2 = st.columns([3, 1])
+        col1, col2 = st.columns([2, 1])
 
         # Fonctionnalité d'analyse de la courbe force-vitesse
         exp_courbe_FV = st.sidebar.expander("Analyse courbe force-vitesse")
         if exp_courbe_FV.expanded:
+
             selected_user_fv = exp_courbe_FV.selectbox('Sélectionner un utilisateur', df['User'].unique(),
                                                        key="User_FV")
             selected_exercice_fv = exp_courbe_FV.selectbox('Sélectionner un exercice',
@@ -385,21 +533,25 @@ if upload_file is not None:
                 graph.create_fv_graph(checkbox_show_estimated_data)
                 st.session_state.graphs_of_fv.append(graph)
 
-            checkbox_show_estimated_data = exp_courbe_FV.checkbox(
-                "Ajouter les valeurs estimées dans la prédiction de la courbe")
+            if exp_courbe_FV.button("Comparer les courbes force-vitesse"):
+                lgr_graph_Fv = len(st.session_state.graphs_of_fv)
+                st.session_state.graphs_of_fv[lgr_graph_Fv - 2].add_curve(
+                    st.session_state.graphs_of_fv[lgr_graph_Fv - 1])
+                st.session_state.graphs_of_fv.pop()
+
+            if len(st.session_state.graphs_of_fv) >= 1:
+                checkbox_show_estimated_data = exp_courbe_FV.checkbox(
+                    "Ajouter les valeurs estimées dans la prédiction de la courbe",
+                    on_change=lambda: st.session_state.graphs_of_fv[
+                        len(st.session_state.graphs_of_fv) - 1].create_fv_graph(checkbox_show_estimated_data)
+                )
+
             fv_selectbox_choice = exp_courbe_FV.selectbox("Type d'entraînement",
                                                           ["Force absolue", "Force accélération", "Force-vitesse",
                                                            "Vitesse-force",
                                                            "Vitesse absolue"])
-
             graph_manager(st.session_state.graphs_of_fv, exp_courbe_FV)
-            for gfv in st.session_state.graphs_of_fv:
-                gfv.create_fv_graph(checkbox_show_estimated_data)
-                gfv.create_fv_zone_infos()
-                with col1:
-                    gfv.show_graph()
-                with col2:
-                    gfv.show_graphs_info()
+            show_all_graphs_in_loop(fv_selectbox_choice)
 
         # Fonctionnalité d'analyse de variables
         exp_analyse_detaille = st.sidebar.expander("Analyse détaillée", expanded=False)
