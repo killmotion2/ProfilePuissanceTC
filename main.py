@@ -267,7 +267,8 @@ class CourbeForceVitesse:
             xaxis=dict(gridcolor='lightgray'),
             yaxis=dict(gridcolor='lightgray', rangemode='nonnegative'),
             hovermode="x unified",
-            margin= dict(l=50, r=50, b=50, t=50)
+            margin= dict(l=50, r=50, b=50, t=50),
+            legend = dict(font=dict(size=10))
         )
         self.figure = figFV
 
