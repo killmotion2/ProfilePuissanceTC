@@ -6,10 +6,10 @@ from plotly.subplots import make_subplots
 from datetime import datetime
 import numpy as np
 from scipy.optimize import curve_fit
-from PIL import Image
+import random
 
 
-##TODO: Comment puis-je rendre l'analyse d'une séance plus intéressante?, est-ce que c'est possible d'avoir statistqiue pour comparer les données (courbe une et l'autre)??, régler problème de template pour courbe FV simple
+##TODO: est-ce que c'est possible d'avoir statistqiue pour comparer les données (courbe une et l'autre) -- comparer l'aire sous la courbe
 # Pour partir l'app: streamlit run "C:\Users\User\Desktop\ProfilePuissance Python\StreamlitV2\main.py"
 
 def create_acronym(name):
@@ -21,14 +21,11 @@ def create_acronym(name):
 
 
 def find_unit_of_title(slt_title):
-    # Recherche le motif '[x]' dans le titre
     match = re.search(r'\[(.*?)]', slt_title)
     if match:
-        # Si un motif est trouvé, renvoie le texte entre crochets (l'unité)
         unit = match.group(1)
         return unit
     else:
-        # Si aucun motif n'est trouvé, renvoie une valeur par défaut ou None
         return None
 def find_Cohen_interpretation(effect_size, ET):
     if effect_size < 0.2 * ET:
@@ -100,7 +97,7 @@ def find_data_from_dates(flt_data, slt_title, user_name):
         customdata=grouped_data['Date'],
     ))
     fig_combined.update_layout(
-        title=f"{user_name}, {selected_exercice}, {slt_title}",
+        title=f"{user_name}, {selected_exercice_DA}, {slt_title}",
         xaxis_title='Charge [lb]',
         yaxis_title=slt_title,
     )
@@ -134,21 +131,20 @@ def find_data_from_single_date(flt_data, selected_title):
 
     fig_combined = go.Figure(
         data=go.Scatter(x=each_set, y=mean_of_variable_per_set, line=dict(dash='dot'), name=f"{selected_title}"))
-    fig_combined.update_layout(title=f"{selected_exercice}, {selected_title} à chaque série ",
+    fig_combined.update_layout(title=f"{selected_exercice_DA}, {selected_title} à chaque série ",
                                xaxis=dict(title='# de séries'), yaxis=dict(title=selected_title))
     fig_combined.update_layout(legend=dict(title=f"{selected_title}"))
 
     improvement_table = go.Figure(data=go.Table(header=dict(values=['Set order', 'Changement dans la performance (%)']),
                                                 cells=dict(
                                                     values=[improvement['Set order'], improvement['Improvement']])))
-    improvement_table.update_layout(margin=dict(t=0, b=0), width=150)
+    improvement_table.update_layout(margin=dict(t=0, b=0))
 
     return fig_combined, improvement_table
 
 
 class CourbeForceVitesse:
     def __init__(self, selected_user, selected_exercice, start_date, end_date):
-        self.df = df
         self.selected_user = selected_user
         self.selected_exercice = selected_exercice
         self.date_debut = pd.to_datetime(start_date)
@@ -156,31 +152,31 @@ class CourbeForceVitesse:
         self.flt_data = df[(df['User'] == selected_user) & (df['Exercise'] == selected_exercice) & (
             df['Date'].between(self.date_debut, self.date_fin))]
         self.figure = None
+        self.table_data = None
         self.popt = None
-        self.F0 = None
+        self.R2 = None
         self.trend_x = None
         self.trend_y = None
         self.is_type_of_exercice = None
         self.selectbox = "Force absolue"
-        self.string_vitesse_maxmin = None
-        self.string_repetition_maxmin = None
-        self.string_load_maxmin = None
+        self.speed_minMax = None
+        self.repetition_maxMin = None
+        self.load_maxMin = None
         self.area_chart = None
-        self.is_comparaison_figure = None
+        self.is_comparaison_figure = False
+        self.info_table = None
 
     def show_graph(self):
-        for trace in self.figure.data:
-            trace.visible = True
-        st.plotly_chart(self.figure)
+        col1, col2 =st.columns([2,1])
+        with col1:
+            st.plotly_chart(self.figure)
+        with col2:
+            st.plotly_chart(self.table_data,theme="streamlit", use_container_width=True)
 
-    def show_graphs_info(self):
-        if self.string_load_maxmin or self.string_vitesse_maxmin or self.string_repetition_maxmin != None:
-            st.write(self.string_load_maxmin)
-            st.write(self.string_vitesse_maxmin)
-            st.write(self.string_repetition_maxmin)
 
-    def equation(self, x, a, b, c):
-        return a * x ** 2 + b * x + c
+
+    def equation(self, x, a, b):
+        return a * x + b
 
     def estimer_charge_squat(self, vitesse_moyenne_x, f0):
         return (-12.87 * vitesse_moyenne_x ** 2 - 46.31 * vitesse_moyenne_x + 116.3) / 100 * f0
@@ -236,7 +232,7 @@ class CourbeForceVitesse:
 
         popt = curve_fit(self.equation, vit_moyenne_x, force_moyenne_y)
         self.popt = popt[0]
-        a_opt, b_opt, c_opt = popt[0]
+        a_opt, b_opt = popt[0]
 
         self.trend_x = np.linspace(min(vit_moyenne_x), 2, 100)
         self.trend_y = self.equation(self.trend_x, *popt[0])
@@ -255,16 +251,12 @@ class CourbeForceVitesse:
         vit_moyenne_x = np.array(vit_moyenne_x)
         force_moyenne_y = np.array(force_moyenne_y)
 
-        equation_text = f"Eq : {a_opt:.2f}x^2 + {b_opt:.2f}x + {c_opt:.2f}"
-        figFV.add_annotation(x=0.85, y=0.9, xref='paper', yref='paper', text=equation_text, showarrow=False)
-
-        residuals = force_moyenne_y - self.equation(vit_moyenne_x, a_opt, b_opt, c_opt)
+        residuals = force_moyenne_y - self.equation(vit_moyenne_x, a_opt, b_opt)
         ss_residual = np.sum(residuals ** 2)
         ss_total = np.sum((force_moyenne_y - np.mean(force_moyenne_y)) ** 2)
-        r_squared = 1 - (ss_residual / ss_total)
+        self.R2 = 1 - (ss_residual / ss_total)
 
-        r_squared_text = f"R2 : {r_squared:.2f}"
-        figFV.add_annotation(x=0.85, y=0.85, xref='paper', yref='paper', text=r_squared_text, showarrow=False)
+
         figFV.update_traces(hovertemplate='Vitesse: %{x:.2f} m/s <br> Charges: %{y:.2f} lbs')
 
         figFV.update_layout(
@@ -274,13 +266,14 @@ class CourbeForceVitesse:
             showlegend=True,
             xaxis=dict(gridcolor='lightgray'),
             yaxis=dict(gridcolor='lightgray', rangemode='nonnegative'),
-            hovermode="x unified"
+            hovermode="x unified",
+            margin= dict(l=50, r=50, b=50, t=50)
         )
         self.figure = figFV
 
     def create_fv_zone_infos(self, fv_selectbox_choice):
         if not self.is_comparaison_figure:
-            a_opt, b_opt, c_opt = self.popt
+            a_opt, b_opt = self.popt
 
             v_min, v_max = 0, 0
             if self.is_type_of_exercice[0] or self.is_type_of_exercice[1]:
@@ -317,8 +310,8 @@ class CourbeForceVitesse:
                 elif fv_selectbox_choice == "Vitesse absolue":
                     v_min, v_max = 1.3, 1.8
 
-            estimated_load_max = int(round(self.equation(v_min, a_opt, b_opt, c_opt)))
-            estimated_load_min = int(round(self.equation(v_max, a_opt, b_opt, c_opt)))
+            estimated_load_max = int(round(self.equation(v_min, a_opt, b_opt)))
+            estimated_load_min = int(round(self.equation(v_max, a_opt, b_opt)))
 
             estimated_load_min = max(0, estimated_load_min)
             estimated_load_max = max(0, estimated_load_max)
@@ -328,61 +321,105 @@ class CourbeForceVitesse:
             reps_max = int(round((1.0278 * self.F0 - estimated_load_max) / (0.0278 * self.F0)))
             if reps_max < 0: reps_max = 0
 
-            self.string_vitesse_maxmin = f"Intervalles de vitesses : {v_min} - {v_max} m/s"
-            self.string_load_maxmin = f"Intervalles de charges : {estimated_load_max} - {estimated_load_min} lbs"
-            self.string_repetition_maxmin = f"Répétitions avant l'échec : {reps_max} - {reps_min}"
-        else:
-            self.string_vitesse_maxmin = self.string_repetition_maxmin = self.string_load_maxmin = None
+            self.speed_minMax = [v_min, v_max]
+            self.load_maxMin = [estimated_load_max, estimated_load_min]
+            self.repetition_maxMin = [reps_max , reps_min]
+
+            info_table = [
+                ["Équation", "R2", "Intervalles de vitesses", "Intervalles de charges", "Répétitions avant l'échec"],
+                [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}", f"{self.R2:.2f}",
+                 f"{self.speed_minMax[0]} - {self.speed_minMax[1]} m/s",
+                 f"{self.load_maxMin[0]} - {self.load_maxMin[1]} lbs",
+                 f"{self.repetition_maxMin[0]} - {self.repetition_maxMin[1]}"]]
+
+            self.table_data = go.Figure(data=go.Table(
+                header=dict(
+                    values=["", f"{create_acronym(self.selected_user)} ({self.date_debut.date()}/{self.date_fin.date()})"]),
+                cells=dict(values=info_table)))
+            self.table_data.update_layout(autosize=True)
+
 
     def add_curve(self, graphs2):
-        for trace in graphs2.figure.data:
-            new_trace = go.Scatter(
-                x=trace.x,
-                y=trace.y,
-                mode=trace.mode,
-                name=trace.name,
-                hovertemplate=f'Vitesse: %{{x:.2f}} m/s <br> Charges: %{{y:.2f}} lbs'
-            )
-            self.figure.add_trace(new_trace)
+        if not self.is_comparaison_figure:
+            self.is_comparaison_figure = True
+            for trace in graphs2.figure.data:
+                new_trace = go.Scatter(
+                    x=trace.x,
+                    y=trace.y,
+                    mode=trace.mode,
+                    name=trace.name,
+                    hovertemplate=f'Vitesse: %{{x:.2f}} m/s <br> Charges: %{{y:.2f}} lbs'
+                )
+                self.figure.add_trace(new_trace)
 
-        if len(self.figure.data) >= 2:
-            self.figure.layout.annotations = []
-            x_values = self.trend_x
-            y1_values = self.trend_y
-            y2_values = graphs2.trend_y
+            if self.is_comparaison_figure :
+                self.figure.layout.annotations = []
+                x_values = self.trend_x
+                y1_values = self.trend_y
+                y2_values = graphs2.trend_y
 
-            area_trace = go.Scatter(
-                x=x_values,
-                y=[abs(y1 - y2) for y1, y2 in zip(y1_values, y2_values)],
-                mode='lines',
-                fill='tozeroy',
-                name='Différence',
-                hovertemplate= 'Différence: %{y:.2f} lbs <br> Vitesse: %{x:.2f} m/s'
-            )
+                area_trace = go.Scatter(
+                    x=x_values,
+                    y=[abs(y1 - y2) for y1, y2 in zip(y1_values, y2_values)],
+                    mode='lines',
+                    fill='tozeroy',
+                    name='Différence',
+                    hovertemplate= 'Différence: %{y:.2f} lbs <br> Vitesse: %{x:.2f} m/s'
+                )
 
-            self.area_chart = area_trace
+                self.area_chart = area_trace
 
-            # Créer un subplot avec deux lignes et une colonne
-            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1)
 
-            # Ajouter les courbes dans le premier graphique
-            for trace in self.figure.data:
-                fig.add_trace(trace, row=1, col=1)
+                # Créer un subplot avec deux lignes et une colonne
+                fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1)
 
-            # Ajouter l'area_chart dans le deuxième graphique
-            fig.add_trace(area_trace, row=2, col=1)
+                # Ajouter les courbes dans le premier graphique
+                for trace in self.figure.data:
+                    fig.add_trace(trace, row=1, col=1)
 
-            # Définir les titres et les étiquettes des axes pour chaque graphique
-            fig.update_layout(
-                title='Relation Force-vitesse',
-                xaxis=dict(title='Vitesse (m/s)', title_standoff=10,side='bottom'),
-                yaxis=dict(title='Charges (lbs)', domain=[0.16, 1.0], rangemode='nonnegative'),
-                yaxis2=dict(title='Diff. de perf. (lbs)', domain=[0.0, 0.15], rangemode='nonnegative')
-            )
-            self.figure = fig
+                # Ajouter l'area_chart dans le deuxième graphique
+                fig.add_trace(area_trace, row=2, col=1)
 
-        graphs2.string_vitesse_maxmin = graphs2.string_load_maxmin = graphs2.string_repetition_maxmin = None
-        self.string_vitesse_maxmin = self.string_load_maxmin = self.string_repetition_maxmin = None
+                # Définir les titres et les étiquettes des axes pour chaque graphique
+                fig.update_layout(
+                    title='Relation Force-vitesse',
+                    yaxis=dict(title='Charges (lbs)', domain=[0.21, 1.0], rangemode='nonnegative'),
+                    yaxis2=dict(title='Diff.(lbs)', domain=[0.05, 0.20], rangemode='nonnegative'),
+                    xaxis=dict(title='Vitesse (m/s)')
+                )
+                info_table = [
+                    ["Équation", "R2"],
+                    [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}", f"{self.R2:.2f}"],
+                    [f"{graphs2.popt[0]:.2f}x + {graphs2.popt[1]:.2f}", f"{graphs2.R2:.2f}"]
+                ]
+                # Create the table figure
+                table = go.Figure(data=go.Table(
+                    header=dict(
+                        values=["",f"{create_acronym(self.selected_user)} ({self.date_debut.date()}/{self.date_fin.date()})",
+                                f"{create_acronym(graphs2.selected_user)} ({graphs2.date_debut.date()}/{graphs2.date_fin.date()})"]
+                    ),
+                    cells=dict(values=info_table)))
+                # Update the table layout
+                self.table_data = table
+                self.figure = fig
+            else:
+                st.warning('Vous ne pouvez pas comparer plus que 2 courbes dans le même graphique')
+
+
+
+class Session_dataframe:
+    def __init__(self, flt_data, user_name, exercice, date):
+        self.data = self.reorganise_data(flt_data)
+        self.name = user_name
+        self.exercice = exercice
+        self.date = date
+
+    def reorganise_data(self, data_to_organise):
+        first_columns = ['Load [lb]', 'Set order', 'Rep order']
+        other_columns = sorted(list(data_to_organise.columns.drop(first_columns)))
+        return data_to_organise.reindex(columns=first_columns + other_columns).reset_index()
+    def show_dataframe(self):
+        st.dataframe(self.data,use_container_width=True)
 
 
 def analyse_data(user, exercise, start_date, end_date):
@@ -391,9 +428,9 @@ def analyse_data(user, exercise, start_date, end_date):
     filtered_data = df[(df['User'] == user) & (df['Date'].between(start_date, end_date)) & (df['Exercise'] == exercise)]
 
     if analyzing_multiple_date:
-        fig, tabl = find_data_from_dates(filtered_data, selected_title,user)
+        fig, tabl = find_data_from_dates(filtered_data, selected_title_DA, user)
     else:
-        fig, tabl = find_data_from_single_date(filtered_data, selected_title)
+        fig, tabl = find_data_from_single_date(filtered_data, selected_title_DA)
 
     return fig, tabl
 
@@ -410,8 +447,8 @@ def add_figure_and_update_table():
         old_title = old_figure['layout']['title']['text']
         new_title = new_figure['layout']['title']['text']
 
-        if selected_exercice in old_title and selected_exercice in new_title:
-            new_title = new_title.replace(f"{selected_exercice},", "")
+        if selected_exercice_DA in old_title and selected_exercice_DA in new_title:
+            new_title = new_title.replace(f"{selected_exercice_DA},", "")
         end_title = ["dans le temps", "à chaque série"]
         for t in end_title:
             if t in old_title and t in new_title:
@@ -443,7 +480,7 @@ def graph_manager(graphs_list, expander):
             if len(graphs_list) < 1:
                 bt = expander.empty()
             else:
-                bt = expander.button(f"{graph_title}     X")
+                bt = expander.button(f"{graph_title}     X",key={expander})
             if bt.__bool__():
                 graphs_list.pop(i)
                 st.experimental_rerun()
@@ -451,13 +488,8 @@ def graph_manager(graphs_list, expander):
 
 def show_all_graphs_in_loop(selectbox_choice):
     for gfv in st.session_state.graphs_of_fv:
-        if selectbox_choice != st.session_state.previous_selectbox_choice:
-            gfv.create_fv_zone_infos(selectbox_choice)
-            st.session_state.previous_selectbox_choice = selectbox_choice
-        with col1:
-            gfv.show_graph()
-        with col2:
-            gfv.show_graphs_info()
+        gfv.create_fv_zone_infos(selectbox_choice)
+        gfv.show_graph()
 
 
 ##VARIABLES IMPORTANTES
@@ -467,6 +499,8 @@ if 'graphs_of_variables' not in st.session_state:
     st.session_state.graphs_of_variables = []
 if 'graphs_of_fv' not in st.session_state:
     st.session_state.graphs_of_fv = []
+if 'dataframe_of_session' not in st.session_state:
+    st.session_state.dataframe_of_session = []
 if 'previous_selectbox_choice' not in st.session_state:
     st.session_state.previous_selectbox_choice = ""
 
@@ -531,6 +565,7 @@ if upload_file is not None:
                 lgr_graph_Fv = len(st.session_state.graphs_of_fv)
                 st.session_state.graphs_of_fv[lgr_graph_Fv - 2].add_curve(
                     st.session_state.graphs_of_fv[lgr_graph_Fv - 1])
+
                 st.session_state.graphs_of_fv.pop()
 
             if len(st.session_state.graphs_of_fv) >= 1:
@@ -548,75 +583,97 @@ if upload_file is not None:
             show_all_graphs_in_loop(fv_selectbox_choice)
 
         # Fonctionnalité d'analyse de variables
-        exp_analyse_detaille = st.sidebar.expander("Analyse détaillée", expanded=False)
+        exp_detail_analysis = st.sidebar.expander("Analyse détaillée dans le temps", expanded=False)
 
-        if exp_analyse_detaille.expanded:
+        if exp_detail_analysis.expanded:
 
-            selected_user = exp_analyse_detaille.selectbox('Sélectionner un utilisateur', df['User'].unique(),
-                                                           key="User_AD")
-            selected_exercice = exp_analyse_detaille.selectbox('Sélectionner un exercice',
-                                                               df[(df['User'] == selected_user)]['Exercise'].unique(),
-                                                               key="Exo_AD")
+            selected_user_DA = exp_detail_analysis.selectbox('Sélectionner un utilisateur', df['User'].unique(),
+                                                             key="User_AD")
+            selected_exercice_DA = exp_detail_analysis.selectbox('Sélectionner un exercice',
+                                                                 df[(df['User'] == selected_user_DA)]['Exercise'].unique(),
+                                                                 key="Exo_AD")
             sorted(titres)
 
-            excluded_titles = ['Date', 'Time', 'User', 'Exercise', 'Set order', 'Rep order']
-            selected_title = exp_analyse_detaille.selectbox("Sélectionnez une variable à analyser",
-                                                            [title for title in titres if
-                                                             title not in excluded_titles and df[
-                                                                 (df['User'] == selected_user) & (
-                                                                         df['Exercise'] == selected_exercice)][
+            excluded_titles_DA = ['Date', 'Time', 'User', 'Exercise', 'Set order', 'Rep order', 'Load [lb]','Estimated 1RM [lb]','Total volume [lb]','Maximum load [lb]']
+            selected_title_DA = exp_detail_analysis.selectbox("Sélectionnez une variable à analyser",
+                                                              [title for title in titres if
+                                                            title not in excluded_titles_DA and df[
+                                                                (df['User'] == selected_user_DA) & (
+                                                                        df['Exercise'] == selected_exercice_DA)][
                                                                  title].notnull().any()], key="Title_AD")
 
-            if exp_analyse_detaille.checkbox("Analyse de plusieurs séances?"):
-                analyzing_multiple_date = True
-                selected_start_date = exp_analyse_detaille.selectbox('Date de début',
-                                                                     options=[date.strftime('%Y-%m-%d') for date in df[
-                                                                         (df['User'] == selected_user) & (df[
-                                                                                                              'Exercise'] == selected_exercice)][
-                                                                         'Date'].unique()], key="Start_date_AD")
-                min_end_date = df[(df['User'] == selected_user) & (df['Exercise'] == selected_exercice) & (
-                        df['Date'] >= pd.to_datetime(selected_start_date))]['Date'].min()
-                selected_end_date = exp_analyse_detaille.selectbox('Date de fin',
-                                                                   options=[date.strftime('%Y-%m-%d') for date in df[
-                                                                       (df['User'] == selected_user) & (df[
-                                                                                                            'Exercise'] == selected_exercice) & (
-                                                                               df['Date'] >= min_end_date)][
-                                                                       'Date'].unique()], key="End_date_AD")
-                start_date = datetime.combine(pd.to_datetime(selected_start_date), datetime.min.time()).date()
-                end_date = datetime.combine(pd.to_datetime(selected_end_date), datetime.max.time()).date()
-            else:
-                analyzing_multiple_date = False
-                selected_date_single = exp_analyse_detaille.selectbox('Date de début',
-                                                                      options=[date.strftime('%Y-%m-%d') for date in df[
-                                                                          (df['User'] == selected_user) & (df[
-                                                                                                               'Exercise'] == selected_exercice)][
-                                                                          'Date'].unique()], key="Single_date_AD")
-                end_date = start_date = datetime.combine(pd.to_datetime(selected_date_single),
-                                                         datetime.max.time()).date()
 
-            if exp_analyse_detaille.button("Ajouter un graphique"):
-                fig, tabl = analyse_data(selected_user, selected_exercice, start_date, end_date)
+            analyzing_multiple_date = True
+            selected_start_date = exp_detail_analysis.selectbox('Date de début',
+                                                                options=[date.strftime('%Y-%m-%d') for date in df[
+                                                                    (df['User'] == selected_user_DA) & (df[
+                                                                                                          'Exercise'] == selected_exercice_DA)][
+                                                                     'Date'].unique()], key="Start_date_AD")
+            min_end_date = df[(df['User'] == selected_user_DA) & (df['Exercise'] == selected_exercice_DA) & (
+                    df['Date'] >= pd.to_datetime(selected_start_date))]['Date'].min()
+            selected_end_date = exp_detail_analysis.selectbox('Date de fin',
+                                                              options=[date.strftime('%Y-%m-%d') for date in df[
+                                                                  (df['User'] == selected_user_DA) & (df[
+                                                                                                        'Exercise'] == selected_exercice_DA) & (
+                                                                           df['Date'] >= min_end_date)][
+                                                                   'Date'].unique()], key="End_date_AD")
+            start_date = datetime.combine(pd.to_datetime(selected_start_date), datetime.min.time()).date()
+            end_date = datetime.combine(pd.to_datetime(selected_end_date), datetime.max.time()).date()
+
+
+            if exp_detail_analysis.button("Ajouter un graphique",key= 'bt_add_graph_DA'):
+                fig, tabl = analyse_data(selected_user_DA, selected_exercice_DA, start_date, end_date)
                 st.session_state.graphs_of_variables.append([fig, tabl])
 
-            if exp_analyse_detaille.button("Ajouter une variable au dernier graphique"):
+            if exp_detail_analysis.button("Ajouter une variable au dernier graphique"):
                 add_figure_and_update_table()
 
             # Dirige les boutons permettant d'effacer les graphiques illustrés
-            graph_manager(st.session_state.graphs_of_variables, exp_analyse_detaille)
+            graph_manager(st.session_state.graphs_of_variables, exp_detail_analysis)
 
             for g in st.session_state.graphs_of_variables:
                 with col1:
-                    st.plotly_chart(g[0])
+                    st.plotly_chart(g[0],use_container_width=True)
                 with col2:
                     if len(g) > 1:
-                        st.plotly_chart(g[1])
+                        st.plotly_chart(g[1],use_container_width=True)
 
+
+
+        exp_detail_session = st.sidebar.expander("Analyse d'une séance", expanded=False)
+        if exp_detail_session.expanded:
+            selected_user_session = exp_detail_session.selectbox('Sélectionner un utilisateur', df['User'].unique(),
+                                                                 key="User_session")
+            selected_exercice_session = exp_detail_session.selectbox('Sélectionner un exercice',
+                                                                     df[(df['User'] == selected_user_session)][
+                                                                         'Exercise'].unique(),
+                                                                     key="Exo_session")
+
+            selected_date_single_session = exp_detail_session.selectbox('Date de début',
+                                                                        options=[date.strftime('%Y-%m-%d') for date in df[
+                                                                    (df['User'] == selected_user_session) & (df[
+                                                                                                                 'Exercise'] == selected_exercice_session)][
+                                                                    'Date'].unique()], key="Single_date_session")
+
+            if exp_detail_session.button("Ajouter un graphique", key='bt_add_graph_session'):
+                filtered_df = df[
+                    (df['User'] == selected_user_session) & (df['Exercise'] == selected_exercice_session) & (
+                            df['Date'] == selected_date_single_session)].dropna(axis=1, how='all').drop(
+                    columns=['Date', 'Time', 'User', 'Total volume [lb]', 'Maximum load [lb]'])
+
+                st.session_state.dataframe_of_session.append(Session_dataframe(filtered_df, selected_user_session, selected_exercice_session, selected_date_single_session))
+
+            # Dirige les boutons permettant d'effacer les graphiques illustrés
+            graph_manager(st.session_state.dataframe_of_session, exp_detail_session)
+
+            for g in st.session_state.dataframe_of_session:
+                g.show_dataframe()
 
     except pd.errors.EmptyDataError:
         st.error("Le fichier est vide ou ne contient pas de colonnes.")
 
 else:
-    #logo = Image.open("C:/Users/User/Desktop/ProfilePuissance Python/Images Streamlit/Logo_Tennis_Canada.png")
-    #emplacement_logo.image(logo, width=100)
+
+    emplacement_logo.image("https://github.com/killmotion2/ProfilePuissanceTC/blob/main/Logo_Tennis_Canada.png?raw=true", width=100)
     main_title.header("Analyse du profile de puissance des athlètes de tennis")
     st.sidebar.warning("Veuillez télécharger un fichier TSV valide.")
