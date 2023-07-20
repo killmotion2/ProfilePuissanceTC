@@ -169,7 +169,7 @@ class CourbeForceVitesse:
     def show_graph(self):
         col1, col2 =st.columns([2,1])
         with col1:
-            st.plotly_chart(self.figure)
+            st.plotly_chart(self.figure, use_container_width=True)
         with col2:
             st.plotly_chart(self.table_data,theme="streamlit", use_container_width=True)
 
@@ -594,7 +594,7 @@ if upload_file is not None:
                                                                  key="Exo_AD")
             sorted(titres)
 
-            excluded_titles_DA = ['Date', 'Time', 'User', 'Exercise', 'Set order', 'Rep order', 'Load [lb]','Estimated 1RM [lb]','Total volume [lb]','Maximum load [lb]']
+            excluded_titles_DA = ['Date', 'Time', 'User', 'Exercise', 'Set order', 'Rep order', 'Load [lb]','Estimated 1RM [lb]']#'Total volume [lb]','Maximum load [lb]']
             selected_title_DA = exp_detail_analysis.selectbox("Sélectionnez une variable à analyser",
                                                               [title for title in titres if
                                                             title not in excluded_titles_DA and df[
