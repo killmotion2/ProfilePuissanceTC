@@ -210,7 +210,7 @@ class CourbeForceVitesse:
 
         figFV = go.Figure(
             data=go.Scatter(x=vit_moyenne_x, y=force_moyenne_y, mode='markers',
-                            name=f"Val.exist., {create_acronym(self.selected_user)}, {self.selected_exercice}"))
+                            name=f"Val.exist., {create_acronym(self.selected_user)} \n, {self.selected_exercice}"))
 
         nouvelles_vitesses = [0.3, 0.5, 0.7]
         nouvelles_charges = [0.0]
@@ -228,7 +228,7 @@ class CourbeForceVitesse:
                 force_moyenne_y.append(nc)
             figFV.add_trace(
                 go.Scatter(x=nouvelles_vitesses, y=nouvelles_charges, mode='markers',
-                           name=f"Val.estim., {create_acronym(self.selected_user)}, {self.selected_exercice}"))
+                           name=f"Val.estim., {create_acronym(self.selected_user)}, \n {self.selected_exercice}"))
 
         popt = curve_fit(self.equation, vit_moyenne_x, force_moyenne_y)
         self.popt = popt[0]
