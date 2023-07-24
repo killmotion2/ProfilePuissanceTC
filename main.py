@@ -6,7 +6,7 @@ from plotly.subplots import make_subplots
 from datetime import datetime
 import numpy as np
 from scipy.optimize import curve_fit
-import random
+import itertools
 
 
 ##TODO: est-ce que c'est possible d'avoir statistqiue pour comparer les données (courbe une et l'autre) -- comparer l'aire sous la courbe
@@ -190,8 +190,20 @@ class CourbeForceVitesse:
     def create_fv_graph(self, checkbox_show_estimated_data):
         self.F0 = self.flt_data['Estimated 1RM [lb]'].unique().max()
         each_set = self.flt_data['Set order'].unique()
-        force_moyenne_y = [self.F0] + [self.flt_data[self.flt_data['Set order'] == set]["Load [lb]"].max() for set in
-                                       each_set]
+
+        force_moyenne_y = [
+            self.flt_data[self.flt_data['Set order'] == set]["Load [lb]"].unique().tolist()
+            for set in each_set
+        ]
+
+        force_moyenne_y = list(itertools.chain(*force_moyenne_y))
+        force_moyenne_y.insert(0, self.F0)
+
+        # Group the data by 'Load [lb]' and 'Date', and calculate the mean of 'Avg. velocity [m/s]' for each group
+        grouped_data = self.flt_data.groupby(['Load [lb]', 'Date'])['Avg. velocity [m/s]'].mean().reset_index()
+        # Create the lists for x and y values
+        vit_moyenne_x = [0.0] + [grouped_data[grouped_data['Load [lb]'] == load_val]['Avg. velocity [m/s]'].mean().tolist()
+                                 for load_val in force_moyenne_y[1:]]
 
         exercice_UB_pull = ["Pull", "Row", "Tirade"]
         exercice_UB_push = ["Bench", "Press"]
@@ -204,9 +216,7 @@ class CourbeForceVitesse:
         is_LB_exercice_push = any(exo in self.selected_exercice.lower() for exo in exercice_LB_push)
         self.is_type_of_exercice = [is_UB_exercice_pull, is_UB_exercice_push, is_LB_exercice_pull, is_LB_exercice_push]
 
-        vit_moyenne_x = [0.0] + [self.flt_data[self.flt_data['Set order'] == set]["Avg. velocity [m/s]"].mean() for set
-                                 in
-                                 each_set]
+
 
         figFV = go.Figure(
             data=go.Scatter(x=vit_moyenne_x, y=force_moyenne_y, mode='markers',
@@ -427,11 +437,8 @@ def analyse_data(user, exercise, start_date, end_date):
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
     filtered_data = df[(df['User'] == user) & (df['Date'].between(start_date, end_date)) & (df['Exercise'] == exercise)]
-
-    if analyzing_multiple_date:
-        fig, tabl = find_data_from_dates(filtered_data, selected_title_DA, user)
-    else:
-        fig, tabl = find_data_from_single_date(filtered_data, selected_title_DA)
+    st.dataframe(filtered_data)
+    fig, tabl = find_data_from_dates(filtered_data, selected_title_DA, user)
 
     return fig, tabl
 
