@@ -257,7 +257,6 @@ class CourbeForceVitesse:
         figFV.add_trace(go.Scatter(x=self.trend_x, y=self.trend_y, mode='lines',
                                    name=f"Courbe FV ({self.date_debut.date()}/{self.date_fin.date()})"))
 
-
         vit_moyenne_x = np.array(vit_moyenne_x)
         force_moyenne_y = np.array(force_moyenne_y)
 
@@ -278,7 +277,7 @@ class CourbeForceVitesse:
             yaxis=dict(gridcolor='lightgray', rangemode='nonnegative'),
             hovermode="x unified",
             margin= dict(l=50, r=50, b=50, t=50),
-            legend = dict(font=dict(size=10))
+            legend=dict(orientation="h",x = 0, y=-0.15)
         )
         self.figure = figFV
 
@@ -431,16 +430,6 @@ class Session_dataframe:
         return data_to_organise.reindex(columns=first_columns + other_columns).reset_index()
     def show_dataframe(self):
         st.dataframe(self.data,use_container_width=True)
-
-
-def analyse_data(user, exercise, start_date, end_date):
-    start_date = pd.to_datetime(start_date)
-    end_date = pd.to_datetime(end_date)
-    filtered_data = df[(df['User'] == user) & (df['Date'].between(start_date, end_date)) & (df['Exercise'] == exercise)]
-    st.dataframe(filtered_data)
-    fig, tabl = find_data_from_dates(filtered_data, selected_title_DA, user)
-
-    return fig, tabl
 
 
 def add_figure_and_update_table():
@@ -630,7 +619,8 @@ if upload_file is not None:
 
 
             if exp_detail_analysis.button("Ajouter un graphique",key= 'bt_add_graph_DA'):
-                fig, tabl = analyse_data(selected_user_DA, selected_exercice_DA, start_date, end_date)
+                filtrd_data_DA =  df[(df['User'] == selected_user_DA) & (df['Date'].between(pd.to_datetime(start_date),pd.to_datetime( end_date))) & (df['Exercise'] == selected_exercice_DA)]
+                fig, tabl =find_data_from_dates(filtrd_data_DA,selected_title_DA,selected_user_DA)
                 st.session_state.graphs_of_variables.append([fig, tabl])
 
             if exp_detail_analysis.button("Ajouter une variable au dernier graphique"):
