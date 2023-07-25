@@ -9,7 +9,7 @@ from scipy.optimize import curve_fit
 import itertools
 
 
-##TODO: est-ce que c'est possible d'avoir statistqiue pour comparer les données (courbe une et l'autre) -- comparer l'aire sous la courbe
+##TODO: Réorganiser la fonction analyse détaillé de plusieurs séance afin d'avoir une classe
 # Pour partir l'app: streamlit run "C:\Users\User\Desktop\ProfilePuissance Python\StreamlitV2\main.py"
 
 def create_acronym(name):
@@ -51,6 +51,14 @@ def find_data_from_dates(flt_data, slt_title, user_name):
     grouped_data['Load [lb]'] = grouped_data.apply(lambda row: load_dict.get((row['Date'], row['Set order'])), axis=1)
     grouped_data = grouped_data.sort_values(by='Load [lb]', ascending=True)
 
+    unique_dates = grouped_data['Date'].unique()
+
+    # Trois teintes de couleur pour le bleu, vert et rouge
+    colors = ['#0072BD', '#4DBEEE', '#B0E0E6','#A2142F', '#ED553B', '#FFAC9F','#007F3F', '#2ECC40', '#9ACD32']
+    date_to_color = {date: colors[i % len(colors)] for i, date in enumerate(unique_dates)}
+
+    grouped_data['Color'] = grouped_data['Date'].map(date_to_color)
+
     #Valeurs des améliorations de chaque charge (Différence entre les deux meilleurs performance de cette charge)
     grouped_by_charge = grouped_data.groupby('Load [lb]')
     improvement_values = []
@@ -59,12 +67,11 @@ def find_data_from_dates(flt_data, slt_title, user_name):
     SWC = []
     effect_size_titles = []
 
-
+    #trouver la différence entre les meilleurs performance et trouver l'effet de Cohen
     for _, group in grouped_by_charge:
         if len(group) > 1:
-            # Utilisez nlargest(2) pour obtenir les deux meilleures performances pour ce groupe
+
             top_2_performances = group.nlargest(2, slt_title)[slt_title].values
-            # Calculez la différence entre les deux meilleures performances
             perf_diff = top_2_performances[0] - top_2_performances[1]
             improvement = round(perf_diff/top_2_performances[1] *100, 2)
 
@@ -92,6 +99,11 @@ def find_data_from_dates(flt_data, slt_title, user_name):
         x=grouped_data['Load [lb]'],
         y=grouped_data[slt_title],
         mode='markers',
+        marker=dict(
+            color=grouped_data['Color'],  # Set the color based on the 'Color' column
+            size=8,  # Adjust the size of the markers as needed
+            line=dict(width=1, color='black'),  # Set marker outline properties
+        ),
         hovertemplate=hovertemplate,
         text=grouped_data['Set order'],
         customdata=grouped_data['Date'],
@@ -113,31 +125,6 @@ def find_data_from_dates(flt_data, slt_title, user_name):
         ])
     ))
 
-    improvement_table.update_layout(margin=dict(t=0, b=0))
-
-    return fig_combined, improvement_table
-
-def find_data_from_single_date(flt_data, selected_title):
-    each_set = flt_data['Set order'].unique()
-    mean_of_variable_per_set = flt_data.groupby('Set order')[selected_title].mean().tolist()
-    mean_of_variable_per_set.reverse()
-
-    improvements = [(mean_of_variable_per_set[i] - mean_of_variable_per_set[i - 1]) / mean_of_variable_per_set[
-        i - 1] * 100 if i > 0 else 0 for i in range(len(mean_of_variable_per_set))]
-    improvements = [0 if abs(imp) < 0.001 else imp for imp in improvements]
-    improvements = [round(imp, 2) for imp in improvements]
-
-    improvement = pd.DataFrame({'Set order': each_set, 'Improvement': improvements})
-
-    fig_combined = go.Figure(
-        data=go.Scatter(x=each_set, y=mean_of_variable_per_set, line=dict(dash='dot'), name=f"{selected_title}"))
-    fig_combined.update_layout(title=f"{selected_exercice_DA}, {selected_title} à chaque série ",
-                               xaxis=dict(title='# de séries'), yaxis=dict(title=selected_title))
-    fig_combined.update_layout(legend=dict(title=f"{selected_title}"))
-
-    improvement_table = go.Figure(data=go.Table(header=dict(values=['Set order', 'Changement dans la performance (%)']),
-                                                cells=dict(
-                                                    values=[improvement['Set order'], improvement['Improvement']])))
     improvement_table.update_layout(margin=dict(t=0, b=0))
 
     return fig_combined, improvement_table
