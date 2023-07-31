@@ -506,6 +506,7 @@ class Session_dataframe:
         return data_to_organise.reindex(columns=first_columns + other_columns).reset_index()
 
     def show_dataframe(self):
+        st.subheader(f"{self.exercice}, {self.name} ({self.date})")
         st.dataframe(self.data, use_container_width=True)
 
 
@@ -723,6 +724,6 @@ else:
     emplacement_logo.image(
         "https://github.com/killmotion2/ProfilePuissanceTC/blob/main/Logo_Tennis_Canada.png?raw=true", width=100)
     photoDroleNico = st.empty()
-    #photoDroleNico.image("https://media.licdn.com/dms/image/C4E03AQFGtfeNyK2brA/profile-displayphoto-shrink_800_800/0/1517235944020?e=2147483647&v=beta&t=WPOE005RqNy-8wcGLzrcz9acjpBGtNi7hAYOi7sG8QY")
+    photoDroleNico.image("https://media.licdn.com/dms/image/C4E03AQFGtfeNyK2brA/profile-displayphoto-shrink_800_800/0/1517235944020?e=2147483647&v=beta&t=WPOE005RqNy-8wcGLzrcz9acjpBGtNi7hAYOi7sG8QY",' "En cette belle journée, je vous souhaites, une bonne analyse, aller!" N.P.')
     main_title.header("Analyse du profile de puissance des athlètes de tennis")
     st.sidebar.warning("Veuillez télécharger un fichier TSV valide.")
