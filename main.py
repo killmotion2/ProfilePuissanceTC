@@ -43,18 +43,20 @@ NB : Il est possible d’ajouter des valeurs estimées à la relation force-vite
 1. Répéter les étapes « Pour ajouter une relation force-vitesse » pour les deux relations force-vitesse
 2. Peser le bouton « Comparer relation force-vitesse »\n
 -Aide mémoire en lien avec l'analyse des données:
-1. L'équation de la relation force-vitesse peut être utile pour comparer un athlète à lui-même. Dans l'équation "Ax + B", plus le B est grand, plus le 1RM de l'athlète est élevé, tandis que plus le A est grand, moins l'atlète à de la faciliter à bouger des charges légère à de haute vitesse. À titre indicatif, au tennis, il est préférable d'avoir un B élevé, et un A petit.
+1. L'équation de la relation force-vitesse peut être utile pour comparer un athlète à lui-même. Dans l'équation "Ax + B", plus le B est grand, plus le 1RM de l'athlète est élevé, tandis que plus le A est grand, moins l'athlète à de la faciliter à bouger des charges légères à de hautes vitesses. À titre indicatif, au tennis, il est préférable d'avoir un B élevé, et un A petit.
 2. Plus le R2 (coefficient de détermination) est grand, plus les points existants se collent à la droite. Grossièrement, plus le R2 se rapproche de 1, plus les points sont proches l'un de l'autre.
 3. Lorsqu'on compare deux relations, la partie "Diff. (lbs)" du graphique correspond à la différence EN ABSOLUE entre les deux relations choisies.
 """
-txt_info_DA = """Cet onglet a pour but d'afficher et d'analyser toutes les performances de l'athlète en fonction de la charge manipulée.\n
+txt_info_DA = """Cet onglet a pour but d'analyser l'évolution de l'athlète en fonction de la charge manipulée.\n
+NB : Les valeurs estimées dans le tableau prennent en compte le changement des deux meilleurs performances de l'athlète à une charge données. Alors, il se peut que ces performances ne soient pas les plus récentes.\n
 - Aide mémoire en lien avec l'analyse de données:\n
 1. Plus le graphique a de valeurs, plus les données présenter dans le tableau (SWC et taille de Cohen) sont valide.
 2. Le plus petit changement significatif (SWC) représente le gain minimal à acquérir afin de considérer une amélioration significative dans la performance.
-3. La taille de Cohen est une façon de catégoriser l'effet de l'intervention. Les catégories sont les suivantes : Faible = 0.2* Écart-type, Modéré = 0.5 * ÉT, Grand = 0.8 * ÉT)."""
+3. La taille de Cohen est une façon de catégoriser l'effet de l'intervention. Les catégories sont les suivantes : Faible = 0.2* Écart-type, Modéré = 0.5 * ÉT, Grand = 0.8 * ÉT). Par exemple, après un cycle de puissance, mon athlète a amélioré sa vitesse maximale au squat avec une charge de 50lbs, passant de 1.3 à 1.4 m/s. Selon la taille de Cohen, cette amélioration est considéré comme 'faible' puisqu'il a eu seulement une augmentation de la vitesse de 0.1m/s."""
 
 txt_info_session = """Cet onglet a pour but d'afficher toutes les données recueillies par l'accéléromètre Enode à 
-l'aide d'un tableau."""
+l'aide d'un tableau.\n
+NB : Chaque ligne affiché représente les informations pour chaque répétition effectuée. Ainsi, il suffit de lire le tableau de gauche à droite pour suivre la progression de l'athlète dans son entraînement. """
 
 #Fonctions générales
 def create_acronym(name):
@@ -621,7 +623,8 @@ if upload_file is not None:
         exp_detail_analysis = st.sidebar.expander("Analyse détaillée dans le temps", expanded=False)
 
         if exp_detail_analysis.expanded:
-
+            if exp_detail_analysis.checkbox("Info", key="Info_DA"):
+                st.info(txt_info_DA)
             selected_user_DA = exp_detail_analysis.selectbox('Sélectionner un utilisateur', sorted(df['User'].unique()),
                                                              key="User_AD")
             selected_exercice_DA = exp_detail_analysis.selectbox('Sélectionner un exercice',
@@ -677,6 +680,8 @@ if upload_file is not None:
         #Fonctionnalité #3. Analyse d'une session
         exp_detail_session = st.sidebar.expander("Analyse d'une séance", expanded=False)
         if exp_detail_session.expanded:
+            if exp_detail_session.checkbox("Info", key="Info_session"):
+                st.info(txt_info_session)
             selected_user_session = exp_detail_session.selectbox('Sélectionner un utilisateur', sorted(df['User'].unique()),
                                                                  key="User_session")
             selected_exercice_session = exp_detail_session.selectbox('Sélectionner un exercice',
@@ -698,7 +703,7 @@ if upload_file is not None:
                 filtered_df = df[
                     (df['User'] == selected_user_session) & (df['Exercise'] == selected_exercice_session) & (
                             df['Date'] == selected_date_single_session)].dropna(axis=1, how='all').drop(
-                    columns=['Date', 'Time', 'User', 'Total volume [lb]', 'Maximum load [lb]'])
+                    columns=['Date', 'Time', 'User','Exercise', 'Total volume [lb]', 'Maximum load [lb]'])
 
                 st.session_state.dataframe_of_session.append(
                     Session_dataframe(filtered_df, selected_user_session, selected_exercice_session,
@@ -717,5 +722,7 @@ else:
 
     emplacement_logo.image(
         "https://github.com/killmotion2/ProfilePuissanceTC/blob/main/Logo_Tennis_Canada.png?raw=true", width=100)
+    photoDroleNico = st.empty()
+    #photoDroleNico.image("https://media.licdn.com/dms/image/C4E03AQFGtfeNyK2brA/profile-displayphoto-shrink_800_800/0/1517235944020?e=2147483647&v=beta&t=WPOE005RqNy-8wcGLzrcz9acjpBGtNi7hAYOi7sG8QY")
     main_title.header("Analyse du profile de puissance des athlètes de tennis")
     st.sidebar.warning("Veuillez télécharger un fichier TSV valide.")
