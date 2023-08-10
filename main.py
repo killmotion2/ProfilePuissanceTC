@@ -7,6 +7,8 @@ from datetime import datetime
 import numpy as np
 from scipy.optimize import curve_fit
 import itertools
+from itertools import cycle
+
 
 # Pour partir l'app: streamlit run "C:\Users\User\Desktop\ProfilePuissance Python\StreamlitV2\main.py"
 
@@ -21,10 +23,12 @@ if 'dataframe_of_session' not in st.session_state:
     st.session_state.dataframe_of_session = []
 if 'previous_selectbox_choice' not in st.session_state:
     st.session_state.previous_selectbox_choice = ""
-checkbox_show_estimated_data = False
+
+load_title = None
+estimated_1RM_title = None
 
 ##ILLUSTRATION INITIALE
-st.set_page_config(page_title="Analyse du profile des athlètes de Tennis Canada", page_icon=":bar_chart:",
+st.set_page_config(page_title="Analyse du profil des athlètes de Tennis Canada", page_icon=":bar_chart:",
                    layout="wide")
 emplacement_logo = st.empty()
 main_title = st.empty()
@@ -36,17 +40,21 @@ Cet onglet a pour but d’afficher et/ou de comparer des relations force-vitesse
 -Pour ajouter une relation force-vitesse :\n
 1. Choisir l’athlète, l’exercice ainsi que l’intervalle de dates à analyser
 2. Peser le bouton « Ajouter relation force-vitesse »\n
-NB : Il est possible d’ajouter des valeurs estimées à la relation force-vitesse, dans le cas où l’intervenant juge qu’il n’existe pas assez de valeurs existantes pour avoir une bonne validité dans la relation.\n
 -Pour comparer deux relations :\n
 1. Répéter les étapes « Pour ajouter une relation force-vitesse » pour les deux relations force-vitesse
 2. Peser le bouton « Comparer relation force-vitesse »\n
+Définitions des zones de vitesses:\n
+1. Force absolue: Capacité à générer une force musculaire maximale ou à bouger des charges très lourdes.
+2. Force-vitesse: Capacité à bouger des charges élevées a une vitesse modérée. EX: Au football, un joueur de la ligne défensive doit rapidement bouger une masse devant lui (son adversaire).
+3. Vitesse-force: Capacité à bouger des charges modérées à haute vitesse ou capacité à exploser. EX: Au football, un joueur de la ligne défensive sort rapidement de sa position initiale avant de faire contact avec son adversaire.
+4. Vitesse absolue: Capacité à surmonter l'inertie rapidement. Ex: Un receveur au football doit pouvoir rapidement surmonter l'inertie lors de ses premiers pas pour atteindre sa vitesse maximale de course. \n 
+Référence: Mann, J. B. et al.(2015). Velocity-based training in football. Strength & Conditioning Journal, 37(6), 52-57. \n
 -Aide mémoire en lien avec l'analyse des données:
 1. L'équation de la relation force-vitesse peut être utile pour comparer un athlète à lui-même. Dans l'équation "Ax + B", plus le B est grand, plus le 1RM de l'athlète est élevé, tandis que plus le A est grand, moins l'athlète à de la faciliter à bouger des charges légères à de hautes vitesses. À titre indicatif, au tennis, il est préférable d'avoir un B élevé, et un A petit.
 2. Plus le R2 (coefficient de détermination) est grand, plus les points existants se collent à la droite. Grossièrement, plus le R2 se rapproche de 1, plus les points sont proches l'un de l'autre.
 3. Lorsqu'on compare deux relations, la partie "Diff. (lbs)" du graphique correspond à la différence EN ABSOLUE entre les deux relations choisies.
 """
 txt_info_DA = """Cet onglet a pour but d'analyser l'évolution de l'athlète en fonction de la charge manipulée.\n
-NB : Les valeurs estimées dans le tableau prennent en compte le changement des deux meilleurs performances de l'athlète à une charge données. Alors, il se peut que ces performances ne soient pas les plus récentes.\n
 - Aide mémoire en lien avec l'analyse de données:\n
 1. Plus le graphique a de valeurs, plus les données présenter dans le tableau (SWC et taille de Cohen) sont valide.
 2. Le plus petit changement significatif (SWC) représente le gain minimal à acquérir afin de considérer une amélioration significative dans la performance.
@@ -55,6 +63,7 @@ NB : Les valeurs estimées dans le tableau prennent en compte le changement des 
 txt_info_session = """Cet onglet a pour but d'afficher toutes les données recueillies par l'accéléromètre Enode à 
 l'aide d'un tableau.\n
 NB : Chaque ligne affiché représente les informations pour chaque répétition effectuée. Ainsi, il suffit de lire le tableau de gauche à droite pour suivre la progression de l'athlète dans son entraînement. """
+
 
 
 # General fonctions
@@ -78,12 +87,33 @@ def find_unit_of_title(slt_title):
 def lbs_to_kg(weight_lbs):
     return weight_lbs * 0.453592
 
+def kg_to_lbs(kg_values):
+    lbs_values = kg_values * 2.20462
+    return lbs_values
+
+def find_difference_of_2_variables(value1, value2):
+    difference_percentage = abs((value2 - value1) * 100 / min(abs(value2), abs(value1)))
+    rounded_percentage = round(difference_percentage, 2)
+    return rounded_percentage
+
 
 # Illustration fonctions
 def graph_manager(graphs_list, expander):
     for i, fig in enumerate(graphs_list):
         with expander:
             graph_title = f"Graphique {i + 1}"
+            if len(graphs_list) < 1:
+                bt = expander.empty()
+            else:
+                bt = expander.button(f"{graph_title}     X", key={expander})
+            if bt.__bool__():
+                graphs_list.pop(i)
+                st.experimental_rerun()
+
+def graph_manager_tableau(graphs_list, expander):
+    for i, fig in enumerate(graphs_list):
+        with expander:
+            graph_title = f"Tableau {i + 1}"
             if len(graphs_list) < 1:
                 bt = expander.empty()
             else:
@@ -109,59 +139,69 @@ class ForceVelocityCurve:
         self.flt_data = df[(df['User'] == selected_user) & (df['Exercise'] == selected_exercice) & (
             df['Date'].between(self.strt_date, self.end_date))]
         self.figure = None
-        self.table_data = None
+        self.table_data_stats = None
+        self.table_data_recommandation = None
+
         self.popt = None
         self.R2 = None
-        self.trend_x = None
-        self.trend_y = None
+        self.SEE = None
+        self.FV_trend_x = None
+        self.FV_trend_y = None
+        self.Pmax_y = None
+        self.Pmax_x = None
+        self.Fmax = None
+        self.Vmax = None
+
         self.is_type_of_exercice = None
         self.selectbox = "Force absolue"
         self.speed_minMax = None
         self.repetition_maxMin = None
         self.load_maxMin = None
         self.area_chart = None
+
         self.is_comparaison_figure = False
-        self.info_table = None
 
     def show_graph(self):
         col1, col2 = st.columns([2, 1])
         with col1:
             st.plotly_chart(self.figure, use_container_width=True)
         with col2:
-            st.plotly_chart(self.table_data, theme="streamlit", use_container_width=True)
+            if not self.is_comparaison_figure:
+                fig = make_subplots(rows=2, cols=1, vertical_spacing=0.1,specs=[[{"type": "table"}],
+               [{"type": "table"}]])
+                fig.add_trace(self.table_data_stats, row=1,col=1)
+                fig.add_trace(self.table_data_recommandation,row=2,col=1)
+
+                fig.update_layout(
+                    margin=dict(l=0, r=0, t=0, b=0),
+                    autosize=True
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.plotly_chart(go.Figure(self.table_data_stats), use_container_width=True,)
 
     def equation(self, x, a, b):
         return a * x + b
 
-    def estimate_weight_squat(self, vitesse_moyenne_x, f0):
-        return (-12.87 * vitesse_moyenne_x ** 2 - 46.31 * vitesse_moyenne_x + 116.3) / 100 * f0
-
-    def estimate_weight_benchpress(self, vitesse_moyenne, f0):
-        return (11.4196 * vitesse_moyenne ** 2 - 81.904 * vitesse_moyenne + 114.03) / 100 * f0
-
-    def estimate_weight_row(self, vitesse_moyenne, f0):
-        return (18.5797 * vitesse_moyenne ** 2 - 104.182 * vitesse_moyenne + 147.94) / 100 * f0
-
-    def create_fv_graph(self, checkbox_show_estimated_data):
+    def create_fv_graph(self):
         # Get lists of infos for FV graph
-        self.F0 = self.flt_data['Estimated 1RM [lb]'].unique().max()
         each_set = self.flt_data['Set order'].unique()
 
         mean_force_y = [
-            self.flt_data[self.flt_data['Set order'] == set]["Load [lb]"].unique().tolist()
+            self.flt_data[self.flt_data['Set order'] == set][load_title].unique().tolist()
             for set in each_set
         ]
-
+            #transforme la liste de listes en une liste d'une colonne
         mean_force_y = list(itertools.chain(*mean_force_y))
-        mean_force_y.insert(0, self.F0)
 
-        grouped_data = self.flt_data.groupby(['Load [lb]', 'Date'])['Avg. velocity [m/s]'].mean().reset_index()
 
-        mean_velocity_x = [0.0] + [
-            grouped_data[grouped_data['Load [lb]'] == load_val]['Avg. velocity [m/s]'].mean().tolist()
-            for load_val in mean_force_y[1:]]
+        grouped_data = self.flt_data.groupby([load_title, 'Date'])['Avg. velocity [m/s]'].mean().reset_index()
 
-        # Code for the bouton "Ajout de valeurs estimées"
+        mean_velocity_x = [
+            grouped_data[grouped_data[load_title] == load_val]['Avg. velocity [m/s]'].mean().tolist()
+            for load_val in mean_force_y[:]]
+
+        #Check wich body part is working on this exercise
         exercice_UB_pull = ["Pull", "Row", "Tirade"]
         exercice_UB_push = ["Bench", "Press", "Push"]
         exercice_LB_pull = ["Deadlift", "Hip"]
@@ -173,75 +213,96 @@ class ForceVelocityCurve:
         is_LB_exercice_push = any(exo in self.selected_exercice.lower() for exo in exercice_LB_push)
         self.is_type_of_exercice = [is_UB_exercice_pull, is_UB_exercice_push, is_LB_exercice_pull, is_LB_exercice_push]
 
-        hovertemplate = 'Vitesse: %{x:.2f} m/s <br> Charges: %{y:.2f} lbs (%{customdata:.1f} kg)'
+        hovertemplate = f'Vitesse: %{{x:.2f}} m/s <br> Charges: %{{y:.2f}} {find_unit_of_title(load_title)}'
         figFV = go.Figure(
             data=go.Scatter(x=mean_velocity_x, y=mean_force_y, mode='markers',
-                            name=f"Val.exist., {create_acronym(self.selected_user)} \n, {self.selected_exercice}",
-                            hovertemplate=hovertemplate,
-                            customdata=lbs_to_kg(np.array(mean_force_y)))
+                            name=f" {create_acronym(self.selected_user)} \n, {self.selected_exercice}",
+                            hovertemplate=hovertemplate)
         )
 
-        arbitary_velocity = [0.3, 0.5, 0.7]
-        arbitary_weight = [0.0]
-
-        if checkbox_show_estimated_data:
-            if is_UB_exercice_push:
-                arbitary_weight = [self.estimate_weight_benchpress(vitesse, self.F0) for vitesse in arbitary_velocity]
-            elif is_UB_exercice_pull:
-                arbitary_weight = [self.estimate_weight_row(vitesse, self.F0) for vitesse in arbitary_velocity]
-            elif is_LB_exercice_push or is_LB_exercice_pull:
-                arbitary_weight = [self.estimate_weight_squat(vitesse, self.F0) for vitesse in arbitary_velocity]
-            for nv in arbitary_velocity:
-                mean_velocity_x.append(nv)
-            for nc in arbitary_weight:
-                mean_force_y.append(nc)
-            figFV.add_trace(
-                go.Scatter(x=arbitary_velocity, y=arbitary_weight, mode='markers',
-                           name=f"Val.estim., {create_acronym(self.selected_user)}, \n {self.selected_exercice}",
-                           hovertemplate=hovertemplate,
-                           customdata=lbs_to_kg(np.array(mean_force_y)))
-            )
 
         # Code for estimation of equation and R2 of the FV relation
         popt = curve_fit(self.equation, mean_velocity_x, mean_force_y)
         self.popt = popt[0]
         a_opt, b_opt = popt[0]
 
-        self.trend_x = np.linspace(min(mean_velocity_x), 2.5, 100)
-        self.trend_y = self.equation(self.trend_x, *popt[0])
+        self.FV_trend_x = np.linspace(0, 2.5, 100)
+        self.FV_trend_y = self.equation(self.FV_trend_x, *popt[0])
+
 
         positive_numbers_of_y = []
-        for i, y in enumerate(self.trend_y):
+        for i, y in enumerate(self.FV_trend_y):
             if y >= 0:
                 positive_numbers_of_y.append(i)
-        self.trend_x = [self.trend_x[i] for i in positive_numbers_of_y]
-        self.trend_y = [self.trend_y[i] for i in positive_numbers_of_y]
 
-        figFV.add_trace(go.Scatter(x=self.trend_x, y=self.trend_y, mode='lines',
-                                   name=f"Courbe FV ({self.strt_date.date()}/{self.end_date.date()})",
-                                   hovertemplate=hovertemplate,
-                                   customdata=lbs_to_kg(np.array(self.trend_y)))
-                        )
+        self.FV_trend_x = [self.FV_trend_x[i] for i in positive_numbers_of_y]
+        self.FV_trend_y = [self.FV_trend_y[i] for i in positive_numbers_of_y]
+
+        # Trouver l'indice du maximum de vitesse et maximum de force de la courbe FV
+        self.Vmax =  max(self.FV_trend_x)
+        self.Fmax = max(self.FV_trend_y)
+
+
+
+        fv_trace = go.Scatter(x=self.FV_trend_x, y=self.FV_trend_y, mode='lines',
+                              name=f"Courbe FV ({self.strt_date.date()}/{self.end_date.date()})",
+                              hovertemplate=hovertemplate)
+
+        figFV.add_trace(fv_trace)
 
         mean_velocity_x = np.array(mean_velocity_x)
         mean_force_y = np.array(mean_force_y)
 
+        #Finding R2
         residuals = mean_force_y - self.equation(mean_velocity_x, a_opt, b_opt)
         ss_residual = np.sum(residuals ** 2)
         ss_total = np.sum((mean_force_y - np.mean(mean_force_y)) ** 2)
         self.R2 = 1 - (ss_residual / ss_total)
+        #Finding Standard Error of the Estimate)
+        df_residual = len(mean_force_y) - 2
+        variance_residual = ss_residual/df_residual
+        self.SEE = round(np.sqrt(variance_residual),2)
+
+
+        #Code for power curve
+        if parameter_chkbox_is_in_kg:
+            power_curve_y = pd.Series(self.FV_trend_y) * 9.81 * pd.Series(self.FV_trend_x)
+        else:
+            power_curve_y = pd.Series(self.FV_trend_y) * 4.44822 * pd.Series(self.FV_trend_x)
+
+        figFV.add_trace(go.Scatter(x=self.FV_trend_x, y=power_curve_y, mode='lines',
+                                   name=f"Courbe Puissance ({self.strt_date.date()}/{self.end_date.date()})",
+                                   hovertemplate=f'Puissance: %{{y:.2f}} W <br> Vitesse: %{{x:.2f}} m/s',
+                                   opacity=0.5,
+                                   line=dict(color=fv_trace.line.color)))
+
+
+        # Trouver l'indice du maximum de la courbe de puissance
+        max_power_index = power_curve_y.idxmax()
+        self.Pmax_x = self.FV_trend_x[max_power_index]
+        self.Pmax_y = power_curve_y[max_power_index]
+
+
+        #Ajout du 1RM et Pmax dans le graphique
+        figFV.add_trace(go.Scatter(x=[0, self.Pmax_x, self.Vmax], y=[self.Fmax, self.Pmax_y, 0],
+                                   mode='markers',
+                                   marker=dict(symbol=1, size=7),
+                                   name="Fmax/Pmax/Vmax"))
 
         figFV.update_layout(
+            template="plotly",
             xaxis_title='Vitesse moyenne (m/s)',
-            yaxis_title='Charge (lb)',
+            yaxis_title=f'Charge ({find_unit_of_title(load_title)})/Puissance (W)',
             title='Relation Force-Vitesse',
             showlegend=True,
-            xaxis=dict(gridcolor='lightgray'),
-            yaxis=dict(gridcolor='lightgray', rangemode='nonnegative'),
+            yaxis=dict( rangemode='nonnegative'),
             hovermode="x unified",
             margin=dict(l=50, r=50, b=50, t=50),
             legend=dict(orientation="h", x=0, y=-0.15)
         )
+        #Warning if data is minimal
+        if len(mean_velocity_x) < 10:
+            st.warning(f"Attention : Le nombre de données utilisées pour créer le graphique de {self.selected_user} ({self.strt_date.date()}/{self.end_date.date()}) est limité. Les résultats pourraient ne pas être aussi précis.", icon="⚠️")
         self.figure = figFV
 
     def create_fv_zone_infos(self, fv_selectbox_choice):
@@ -290,9 +351,9 @@ class ForceVelocityCurve:
             estimated_load_min = max(0, estimated_load_min)
             estimated_load_max = max(0, estimated_load_max)
 
-            reps_min = int(round((1.0278 * self.F0 - estimated_load_min) / (0.0278 * self.F0)))
+            reps_min = int(round((1.0278 * self.Fmax - estimated_load_min) / (0.0278 * self.Fmax)))
             if reps_min < 0: reps_min = 0
-            reps_max = int(round((1.0278 * self.F0 - estimated_load_max) / (0.0278 * self.F0)))
+            reps_max = int(round((1.0278 * self.Fmax - estimated_load_max) / (0.0278 * self.Fmax)))
             if reps_max < 0: reps_max = 0
 
             self.speed_minMax = [v_min, v_max]
@@ -300,86 +361,96 @@ class ForceVelocityCurve:
             self.repetition_maxMin = [reps_max, reps_min]
 
             # Construction of the infos table
-            info_table = [
-                ["Équation", "R<sup>2</sup>", "Intervalles de vitesses", "Intervalles de charges",
-                 "Répétitions avant l'échec"],
-                [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}", f"{self.R2:.2f}",
-                 f"{self.speed_minMax[0]} - {self.speed_minMax[1]} m/s",
-                 f"{self.load_maxMin[0]}({lbs_to_kg(self.load_maxMin[0]):.1f}) - {self.load_maxMin[1]}({lbs_to_kg(self.load_maxMin[1]):.1f}) lbs (kg)",
+            info_table_stats = [
+                ["Équation", "R<sup>2</sup>","Erreur de l'estimation", "Force max (1RM)","Puissance max","Vitesse max"],
+                [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}",
+                 f"{self.R2:.2f}",
+                 f"\u00B1{self.SEE:.2f} ({find_unit_of_title(load_title)})",
+                 f"{round(self.Fmax)} ({find_unit_of_title(load_title)})",
+                 f"{round(self.Pmax_y)} (W) (à {round(self.Pmax_x,2)} m/s)",
+                 f"{round(self.Vmax,2)} (m/s)"]]
+
+            self.table_data_stats = go.Table(
+                header=dict(
+                    values=["Infos statistiques",
+                            f"{create_acronym(self.selected_user)} \n ({self.strt_date.date()} \n/ {self.end_date.date()})"]),
+                cells=dict(values=info_table_stats))
+
+            info_table_recommandations = [["Intervalles de vitesses", "Intervalles de charges",
+                 "Répétitions avant l'échec"],[f"{self.speed_minMax[0]} - {self.speed_minMax[1]} m/s",
+                 f"{self.load_maxMin[0]} - {self.load_maxMin[1]} {find_unit_of_title(load_title)}",
                  f"{self.repetition_maxMin[0]} - {self.repetition_maxMin[1]}"]]
 
-            self.table_data = go.Figure(data=go.Table(
+            self.table_data_recommandation = go.Table(
                 header=dict(
-                    values=["",
+                    values=["Recommandations",
                             f"{create_acronym(self.selected_user)} ({self.strt_date.date()}/{self.end_date.date()})"]),
-                cells=dict(values=info_table)))
-            self.table_data.update_layout(autosize=True)
+                cells=dict(values=info_table_recommandations))
+
 
     def add_curve(self, graphs2):
         if not self.is_comparaison_figure:
             self.is_comparaison_figure = True
             # Add all the info of the graphs#2 to the graph#1
+
+            # Thème de couleur bleu pour self.figure
+            theme_color_self = cycle(["#6baed6","#08519c","#c6dbef"])
+            # Thème de couleur orange pour graph2
+            theme_color_graph2 = cycle(["#fd8d3c","#e6550d","#fdd0a2"])
+
+            temporFig = go.Figure()
+            # Ajouter les lignes de self.figure avec le thème de couleur bleu
+            for trace in self.figure.data:
+                new_trace = go.Scatter(
+                    x=trace.x,
+                    y=trace.y,
+                    mode=trace.mode,
+                    name=trace.name,
+                    marker=dict(symbol=trace.marker.symbol, size=trace.marker.size),
+                    line=dict(color=next(theme_color_self)),
+                    hovertemplate=trace.hovertemplate
+                )
+                temporFig.add_trace(new_trace)
+            self.figure = temporFig
+            # Ajouter les lignes de graph2 avec le thème de couleur orange
             for trace in graphs2.figure.data:
                 new_trace = go.Scatter(
                     x=trace.x,
                     y=trace.y,
                     mode=trace.mode,
                     name=trace.name,
-                    hovertemplate=f'Vitesse: %{{x:.2f}} m/s <br> Charges: %{{y:.2f}} lbs'
+                    marker=dict(symbol=trace.marker.symbol, size=trace.marker.size),
+                    line=dict(color=next(theme_color_graph2)),
+                    hovertemplate=trace.hovertemplate
                 )
                 self.figure.add_trace(new_trace)
-            # Contruction of the area_chart (difference between the two FV relations)
-            if self.is_comparaison_figure:
-                self.figure.layout.annotations = []
-                x_values = self.trend_x
-                y1_values = self.trend_y
-                y2_values = graphs2.trend_y
 
-                area_trace = go.Scatter(
-                    x=x_values,
-                    y=[abs(y1 - y2) for y1, y2 in zip(y1_values, y2_values)],
-                    mode='lines',
-                    fill='tozeroy',
-                    name='Différence',
-                    hovertemplate='Différence: %{y:.2f} lbs <br> Vitesse: %{x:.2f} m/s'
+            self.figure.update_layout(
+                title='Relation Force-vitesse',
+                yaxis=dict(title=f'Charges {find_unit_of_title(load_title)}/Puissance (W)', domain=[0.21, 1.0], rangemode='nonnegative'),
+                yaxis2=dict(title=f'Diff.{find_unit_of_title(load_title)}', domain=[0.05, 0.20], rangemode='nonnegative'),
+                xaxis=dict(title='Vitesse (m/s)'),
+                legend=dict(orientation="h", x=0, y=-0.15)
+            )
+            # Create the statistic infos table
+            info_table = [
+                ["Équation", "R2", "Force max (1RM)", "Puissance max", "Vitesse max"],
+                [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}", f"{self.R2:.2f}", f"{round(self.Fmax,2)} ({find_unit_of_title(load_title)})", f"{round(self.Pmax_y)} (W) (à {round(self.Pmax_x,2)} m/s)", f"{round(self.Vmax, 2)} (m/s)"],
+                [f"{graphs2.popt[0]:.2f}x + {graphs2.popt[1]:.2f}", f"{graphs2.R2:.2f}",f"{round(graphs2.Fmax)} ({find_unit_of_title(load_title)})", f"{round(graphs2.Pmax_y)} (W) (à {round(graphs2.Pmax_x,2)} m/s)", f"{round(graphs2.Vmax, 2)} (m/s)"],
+                ["","", f"{find_difference_of_2_variables(graphs2.Fmax,self.Fmax)} %", f"{find_difference_of_2_variables(self.Pmax_y, graphs2.Pmax_y)} %", f"{find_difference_of_2_variables(self.Vmax, graphs2.Vmax)} %"]
+            ]
 
-                )
+            self.table_data_stats = go.Table(
+                header=dict(
+                    values=["Infos statistiques",
+                            f"{create_acronym(self.selected_user)} \n ({self.strt_date.date()} \n/ {self.end_date.date()})",
+                            f"{create_acronym(graphs2.selected_user)}\n ({graphs2.strt_date.date()}\n/ {graphs2.end_date.date()})","Différence (%)"]
+                ),
+                cells=dict(values=info_table))
+            self.table_data_recommandation = None
 
-                self.area_chart = area_trace
-
-                # Display a graph with 2 Fv relations and the area_chart
-                fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1)
-
-                for trace in self.figure.data:
-                    fig.add_trace(trace, row=1, col=1)
-
-                fig.add_trace(area_trace, row=2, col=1)
-
-                fig.update_layout(
-                    title='Relation Force-vitesse',
-                    yaxis=dict(title='Charges (lbs)', domain=[0.21, 1.0], rangemode='nonnegative'),
-                    yaxis2=dict(title='Diff.(lbs)', domain=[0.05, 0.20], rangemode='nonnegative'),
-                    xaxis=dict(title='Vitesse (m/s)'),
-                    legend=dict(orientation="h", x=0, y=-0.15)
-                )
-                info_table = [
-                    ["Équation", "R2"],
-                    [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}", f"{self.R2:.2f}"],
-                    [f"{graphs2.popt[0]:.2f}x + {graphs2.popt[1]:.2f}", f"{graphs2.R2:.2f}"]
-                ]
-                # Create the infos table of the primary graph
-                table = go.Figure(data=go.Table(
-                    header=dict(
-                        values=["",
-                                f"{create_acronym(self.selected_user)} ({self.strt_date.date()}/{self.end_date.date()})",
-                                f"{create_acronym(graphs2.selected_user)} ({graphs2.strt_date.date()}/{graphs2.end_date.date()})"]
-                    ),
-                    cells=dict(values=info_table)))
-
-                self.table_data = table
-                self.figure = fig
-            else:
-                st.warning('Vous ne pouvez pas comparer plus que 2 courbes dans le même graphique')
+        else:
+            st.warning('Vous ne pouvez pas comparer plus que 2 courbes dans le même graphique')
 
 
 class Multiple_Dates_Analysis:
@@ -417,12 +488,12 @@ class Multiple_Dates_Analysis:
 
         grouped_data = self.flt_data.groupby(['Set order', 'Date'])[self.slt_title].mean().reset_index()
 
-        load_date_set = self.flt_data.groupby(['Date', 'Set order'])['Load [lb]'].max().reset_index()
+        load_date_set = self.flt_data.groupby(['Date', 'Set order'])[load_title].max().reset_index()
 
-        load_dict = load_date_set.set_index(['Date', 'Set order'])['Load [lb]'].to_dict()
-        grouped_data['Load [lb]'] = grouped_data.apply(lambda row: load_dict.get((row['Date'], row['Set order'])),
-                                                       axis=1)
-        grouped_data = grouped_data.sort_values(by='Load [lb]', ascending=True)
+        load_dict = load_date_set.set_index(['Date', 'Set order'])[load_title].to_dict()
+        grouped_data[load_title] = grouped_data.apply(lambda row: load_dict.get((row['Date'], row['Set order'])),
+                                                      axis=1)
+        grouped_data = grouped_data.sort_values(by=load_title, ascending=True)
 
         unique_dates = grouped_data['Date'].unique()
 
@@ -433,7 +504,7 @@ class Multiple_Dates_Analysis:
         grouped_data['Color'] = grouped_data['Date'].map(date_to_color)
 
         # Initializing data for the infos table
-        grouped_by_charge = grouped_data.groupby('Load [lb]')
+        grouped_by_charge = grouped_data.groupby(load_title)
         improvement_values = []
         perf_differences = []
         effect_sizes = []
@@ -469,11 +540,11 @@ class Multiple_Dates_Analysis:
         perf_changes_combined = [f"{pourcentage} ({original_unit})" for pourcentage, original_unit in
                                  zip(improvement_values, perf_differences)]
 
-        hovertemplate = 'Date: %{customdata|%Y-%m-%d}<br>#séries: %{text}<br>Charge: %{x}<br>' + self.slt_title + ': %{y}<extra></extra>'
+        hovertemplate = f'Date: %{{customdata|%Y-%m-%d}}<br>#séries: %{{text}}<br>Charge [{find_unit_of_title(load_title)}]: %{{x}} <br>' + self.slt_title + ': %{y}<extra></extra>'
 
         fig_combined = go.Figure()
         fig_combined.add_trace(go.Scatter(
-            x=grouped_data['Load [lb]'],
+            x=grouped_data[load_title],
             y=grouped_data[self.slt_title],
             mode='markers',
             marker=dict(
@@ -487,16 +558,16 @@ class Multiple_Dates_Analysis:
         ))
         fig_combined.update_layout(
             title=f"{self.user}, {selected_exercice_DA}, {self.slt_title}",
-            xaxis_title='Charge [lb]',
+            xaxis_title=f'Charge {find_unit_of_title(load_title)}',
             yaxis_title=self.slt_title,
         )
 
         improvement_table = go.Figure(data=go.Table(
-            header=dict(values=['Charge (lb)', f"Changement dans la performance (%,({unit_of_title}))",
+            header=dict(values=[f'Charge {find_unit_of_title(load_title)}', f"Changement dans la performance (%,({unit_of_title}))",
                                 f"Le plut petit changement significatif (SWC) ({unit_of_title})", 'Taille de Cohen',
                                 f"Objectif de performance ({unit_of_title})"]),
             cells=dict(values=[
-                grouped_data['Load [lb]'].unique(),
+                grouped_data[load_title].unique(),
                 perf_changes_combined,
                 SWC,
                 effect_size_titles,
@@ -517,7 +588,7 @@ class Session_dataframe:
         self.date = date
 
     def reorganise_data(self, data_to_organise):
-        first_columns = ['Load [lb]', 'Set order', 'Rep order']
+        first_columns = [load_title, 'Set order', 'Rep order']
         other_columns = sorted(list(data_to_organise.columns.drop(first_columns)))
         return data_to_organise.reindex(columns=first_columns + other_columns).reset_index()
 
@@ -536,9 +607,53 @@ if upload_file is not None:
     main_title.empty()
     try:
         df = pd.read_table(upload_file)
+        columns_to_drop = ['Total volume', 'Maximum load']
+        for col in df.columns:
+            if any(word in col for word in columns_to_drop):
+                filtered_df = df.drop(columns=[col])
+        load_title = df.filter(like='Load').columns[0]
+        estimated_1RM_title = df.filter(like='Estimated 1RM').columns[0]
+        if "lb" in find_unit_of_title(estimated_1RM_title):
+            df_in_kg = False
+        else :
+            df_in_kg = True
         df['Date'] = pd.to_datetime(df['Date'])
 
         titres = df.columns.tolist()
+
+        exp_parametre = st.sidebar.expander("Paramètres")
+        if exp_parametre.expanded:
+            parameter_chkbox_is_in_kg = exp_parametre.checkbox("kg", value=df_in_kg)
+            if df_in_kg and not parameter_chkbox_is_in_kg:
+
+                # Convertir les colonnes estimate_title et load_title de kg à lb
+                df["Estimated 1RM [lb]"] = kg_to_lbs(df["Estimated 1RM [lb]"])
+                df["Load [lb]"] = kg_to_lbs(df["Load [lb]"])
+
+                # Supprimer les colonnes existantes
+                df.drop(columns=["Estimated 1RM [kg]", "Load [kg]"], inplace=True)
+
+                # Changer les titres des colonnes
+                estimated_1RM_title = "Estimated 1RM [lb]"
+                load_title = "Load [lb]"
+                df.rename(columns={"Estimated 1RM [kg]": estimated_1RM_title,
+                                   "Load [kg]": load_title}, inplace=True)
+
+            elif not df_in_kg and parameter_chkbox_is_in_kg:
+
+                # Convertir les colonnes estimate_title et load_title de lb à kg
+                df["Estimated 1RM [kg]"] = lbs_to_kg(df["Estimated 1RM [lb]"])
+                df["Load [kg]"] = lbs_to_kg(df["Load [lb]"])
+
+                # Supprimer les colonnes existantes
+                df.drop(columns=["Estimated 1RM [lb]", "Load [lb]"], inplace=True)
+
+                # Changer les titres des colonnes
+                estimated_1RM_title = "Estimated 1RM [kg]"
+                load_title = "Load [kg]"
+                df.rename(columns={"Load [lb]": load_title,
+                                   "Estimated 1RM [lb]": estimated_1RM_title}, inplace=True)
+
 
         # Fonctionnality #1. Analyse de la courbe force-vitesse
         exp_courbe_FV = st.sidebar.expander("Analyse courbe force-vitesse")
@@ -569,30 +684,23 @@ if upload_file is not None:
             start_date_fv = datetime.combine(pd.to_datetime(selected_start_date), datetime.min.time()).date()
             end_date_fv = datetime.combine(pd.to_datetime(selected_end_date), datetime.max.time()).date()
 
-            #Remove "Ajout relation FV" if Flywheel or jump exercice is selected
+            # Remove "Ajout relation FV" if Flywheel or jump exercice is selected
             if "Flywheel" in selected_exercice_fv or "jump" in selected_exercice_fv:
                 exp_courbe_FV.button("Ajouter relation force-vitesse", disabled=True)
             elif exp_courbe_FV.button("Ajouter relation force-vitesse", disabled=False):
                 graph = ForceVelocityCurve(selected_user_fv, selected_exercice_fv, start_date_fv, end_date_fv)
-                graph.create_fv_graph(checkbox_show_estimated_data)
+                graph.create_fv_graph()
                 st.session_state.graphs_of_fv.append(graph)
 
-            #Button to create FV graph comparaison
+            # Button to create FV graph comparaison
             if exp_courbe_FV.button("Comparer les courbes force-vitesse"):
                 lgr_graph_Fv = len(st.session_state.graphs_of_fv)
                 st.session_state.graphs_of_fv[lgr_graph_Fv - 2].add_curve(
                     st.session_state.graphs_of_fv[lgr_graph_Fv - 1])
                 st.session_state.graphs_of_fv.pop()
-            #Add button "Ajouter les valeurs estimées" if there is >1 graphs
-            if len(st.session_state.graphs_of_fv) >= 1:
-                checkbox_show_estimated_data = exp_courbe_FV.checkbox(
-                    "Ajouter les valeurs estimées dans la prédiction de la courbe",
-                    on_change=lambda: st.session_state.graphs_of_fv[
-                        len(st.session_state.graphs_of_fv) - 1].create_fv_graph(checkbox_show_estimated_data)
-                )
 
             fv_selectbox_choice = exp_courbe_FV.selectbox("Type d'entraînement",
-                                                          ["Force absolue", "Force accélération", "Force-vitesse",
+                                                          ["Force absolue", "Force-vitesse",
                                                            "Vitesse-force",
                                                            "Vitesse absolue"])
             graph_manager(st.session_state.graphs_of_fv, exp_courbe_FV)
@@ -610,21 +718,22 @@ if upload_file is not None:
                                                                  sorted(df[(df['User'] == selected_user_DA)][
                                                                             'Exercise'].unique()),
                                                                  key="Exo_AD")
-            
-            #Adjust the order of the titles (the available variables) by putting some at the start of the selection to be favored
+
+            # Adjust the order of the titles (the available variables) by putting some at the start of the selection to be favored
             sorted(titres)
             custom_order_titles = ['Time to peak velocity [ms]', 'Peak velocity [m/s]', 'Peak power [W]',
                                    'Peak RFD [N/s]']
             sorted_remaining_titles = sorted([title for title in titres if title not in custom_order_titles])
-            excluded_titles_DA = ['Date', 'Time', 'User', 'Exercise', 'Set order', 'Rep order', 'Load [lb]',
-                                  'Estimated 1RM [lb]', 'Total volume [lb]', 'Maximum load [lb]']
+            excluded_titles_DA = ['Date', 'Time', 'User', 'Exercise', 'Set order', 'Rep order', 'Load',
+                                  'Estimated 1RM', 'Total volume', 'Maximum load']
 
             sorted_titles = custom_order_titles + sorted_remaining_titles
             selected_title_DA = exp_detail_analysis.selectbox(
                 "Sélectionnez une variable à analyser",
                 [title for title in sorted_titles if
-                 title not in excluded_titles_DA and df[
-                     (df['User'] == selected_user_DA) & (df['Exercise'] == selected_exercice_DA)][
+                 title not in excluded_titles_DA and
+                 all(keyword not in title for keyword in excluded_titles_DA) and
+                 df[(df['User'] == selected_user_DA) & (df['Exercise'] == selected_exercice_DA)][
                      title].notnull().any()],
                 key="Title_AD"
             )
@@ -643,8 +752,8 @@ if upload_file is not None:
                                                                   'Date'].unique()], key="End_date_AD")
             start_date = datetime.combine(pd.to_datetime(selected_start_date), datetime.min.time()).date()
             end_date = datetime.combine(pd.to_datetime(selected_end_date), datetime.max.time()).date()
-            
-            #Button to add the graph
+
+            # Button to add the graph
             if exp_detail_analysis.button("Ajouter un graphique", key='bt_add_graph_DA'):
                 filtrd_data_DA = df[(df['User'] == selected_user_DA) & (
                     df['Date'].between(pd.to_datetime(start_date), pd.to_datetime(end_date))) & (
@@ -684,14 +793,17 @@ if upload_file is not None:
             if exp_detail_session.button("Ajouter un graphique", key='bt_add_graph_session'):
                 filtered_df = df[
                     (df['User'] == selected_user_session) & (df['Exercise'] == selected_exercice_session) & (
-                            df['Date'] == selected_date_single_session)].dropna(axis=1, how='all').drop(
-                    columns=['Date', 'Time', 'User', 'Exercise', 'Total volume [lb]', 'Maximum load [lb]'])
+                            df['Date'] == selected_date_single_session)].dropna(axis=1, how='all')
+                columns_to_drop = ['Date', 'Time', 'User', 'Exercise', 'Total volume', 'Maximum load']
+                for col in filtered_df.columns:
+                    if any(word in col for word in columns_to_drop):
+                        filtered_df = filtered_df.drop(columns=[col])
 
                 st.session_state.dataframe_of_session.append(
                     Session_dataframe(filtered_df, selected_user_session, selected_exercice_session,
                                       selected_date_single_session))
-                
-            graph_manager(st.session_state.dataframe_of_session, exp_detail_session)
+
+            graph_manager_tableau(st.session_state.dataframe_of_session, exp_detail_session)
             for g in st.session_state.dataframe_of_session:
                 g.show_dataframe()
 
@@ -701,5 +813,5 @@ if upload_file is not None:
 else:
     emplacement_logo.image(
         "https://github.com/killmotion2/ProfilePuissanceTC/blob/main/Logo_Tennis_Canada.png?raw=true", width=100)
-    main_title.header("Analyse du profile de puissance des athlètes de tennis")
+    main_title.header("Analyse du profil de puissance des athlètes de tennis")
     st.sidebar.warning("Veuillez télécharger un fichier TSV valide.")
