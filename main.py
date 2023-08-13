@@ -323,9 +323,7 @@ class ForceVelocityCurve:
             v_min, v_max = 0, 0
             if self.is_type_of_exercice[0] or self.is_type_of_exercice[1]:
                 if fv_selectbox_choice == "Force absolue":
-                    v_min, v_max = 0.15, 0.5
-                elif fv_selectbox_choice == "Force accélération":
-                    v_min, v_max = 0.5, 0.75
+                    v_min, v_max = 0.15, 0.75
                 elif fv_selectbox_choice == "Force-vitesse":
                     v_min, v_max = 0.75, 1
                 elif fv_selectbox_choice == "Vitesse-force":
@@ -334,9 +332,7 @@ class ForceVelocityCurve:
                     v_min, v_max = 1.3, 1.5
             elif self.is_type_of_exercice[2] or self.is_type_of_exercice[3]:
                 if fv_selectbox_choice == "Force absolue":
-                    v_min, v_max = 0.3, 0.5
-                elif fv_selectbox_choice == "Force accélération":
-                    v_min, v_max = 0.5, 0.75
+                    v_min, v_max = 0.3, 0.75
                 elif fv_selectbox_choice == "Force-vitesse":
                     v_min, v_max = 0.75, 1
                 elif fv_selectbox_choice == "Vitesse-force":
@@ -345,9 +341,7 @@ class ForceVelocityCurve:
                     v_min, v_max = 1.3, 1.8
             else:
                 if fv_selectbox_choice == "Force absolue":
-                    v_min, v_max = 0.3, 0.5
-                elif fv_selectbox_choice == "Force accélération":
-                    v_min, v_max = 0.5, 0.75
+                    v_min, v_max = 0.3, 0.75
                 elif fv_selectbox_choice == "Force-vitesse":
                     v_min, v_max = 0.75, 1
                 elif fv_selectbox_choice == "Vitesse-force":
