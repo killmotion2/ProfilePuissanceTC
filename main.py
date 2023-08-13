@@ -85,16 +85,26 @@ def find_unit_of_title(slt_title):
 
 
 def lbs_to_kg(weight_lbs):
-    return weight_lbs * 0.453592
+    kg = weight_lbs * 0.453592
+    return kg
 
 def kg_to_lbs(kg_values):
     lbs_values = kg_values * 2.20462
-    return lbs_values
+    return round(lbs_values,2)
 
 def find_difference_of_2_variables(value1, value2):
     difference_percentage = abs((value2 - value1) * 100 / min(abs(value2), abs(value1)))
     rounded_percentage = round(difference_percentage, 2)
     return rounded_percentage
+
+# Natural filter for df
+def remove_outliers(column):
+    q1 = column.quantile(0.25)
+    q3 = column.quantile(0.75)
+    iqr = q3 - q1
+    lower_bound = q1 - 1.5 * iqr
+    upper_bound = q3 + 1.5 * iqr
+    return column.apply(lambda x: None if x < lower_bound or x > upper_bound else x)
 
 
 # Illustration fonctions
@@ -191,7 +201,7 @@ class ForceVelocityCurve:
             self.flt_data[self.flt_data['Set order'] == set][load_title].unique().tolist()
             for set in each_set
         ]
-            #transforme la liste de listes en une liste d'une colonne
+            #Transform a list of lists in a simple list
         mean_force_y = list(itertools.chain(*mean_force_y))
 
 
@@ -201,7 +211,7 @@ class ForceVelocityCurve:
             grouped_data[grouped_data[load_title] == load_val]['Avg. velocity [m/s]'].mean().tolist()
             for load_val in mean_force_y[:]]
 
-        #Check wich body part is working on this exercise
+            #Check wich body part is working on this exercise
         exercice_UB_pull = ["Pull", "Row", "Tirade"]
         exercice_UB_push = ["Bench", "Press", "Push"]
         exercice_LB_pull = ["Deadlift", "Hip"]
@@ -362,7 +372,7 @@ class ForceVelocityCurve:
 
             # Construction of the infos table
             info_table_stats = [
-                ["Équation", "R<sup>2</sup>","Erreur de l'estimation", "Force max (1RM)","Puissance max","Vitesse max"],
+                ["Équation", "R<sup>2</sup>","Erreur de l'estimation", "Force max ","Puissance max","Vitesse max"],
                 [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}",
                  f"{self.R2:.2f}",
                  f"\u00B1{self.SEE:.2f} ({find_unit_of_title(load_title)})",
@@ -434,10 +444,10 @@ class ForceVelocityCurve:
             )
             # Create the statistic infos table
             info_table = [
-                ["Équation", "R2", "Force max (1RM)", "Puissance max", "Vitesse max"],
-                [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}", f"{self.R2:.2f}", f"{round(self.Fmax,2)} ({find_unit_of_title(load_title)})", f"{round(self.Pmax_y)} (W) (à {round(self.Pmax_x,2)} m/s)", f"{round(self.Vmax, 2)} (m/s)"],
-                [f"{graphs2.popt[0]:.2f}x + {graphs2.popt[1]:.2f}", f"{graphs2.R2:.2f}",f"{round(graphs2.Fmax)} ({find_unit_of_title(load_title)})", f"{round(graphs2.Pmax_y)} (W) (à {round(graphs2.Pmax_x,2)} m/s)", f"{round(graphs2.Vmax, 2)} (m/s)"],
-                ["","", f"{find_difference_of_2_variables(graphs2.Fmax,self.Fmax)} %", f"{find_difference_of_2_variables(self.Pmax_y, graphs2.Pmax_y)} %", f"{find_difference_of_2_variables(self.Vmax, graphs2.Vmax)} %"]
+                ["Équation", "R2", "Erreur de l'estimation","Force max", "Puissance max", "Vitesse max"],
+                [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}", f"{self.R2:.2f}",f"\u00B1{self.SEE:.2f} ({find_unit_of_title(load_title)})", f"{round(self.Fmax,2)} ({find_unit_of_title(load_title)})", f"{round(self.Pmax_y)} (W) (à {round(self.Pmax_x,2)} m/s)", f"{round(self.Vmax, 2)} (m/s)"],
+                [f"{graphs2.popt[0]:.2f}x + {graphs2.popt[1]:.2f}", f"{graphs2.R2:.2f}",f"\u00B1{graphs2.SEE:.2f} ({find_unit_of_title(load_title)})",f"{round(graphs2.Fmax)} ({find_unit_of_title(load_title)})", f"{round(graphs2.Pmax_y)} (W) (à {round(graphs2.Pmax_x,2)} m/s)", f"{round(graphs2.Vmax, 2)} (m/s)"],
+                ["-","-","-", f"{find_difference_of_2_variables(graphs2.Fmax,self.Fmax)} %", f"{find_difference_of_2_variables(self.Pmax_y, graphs2.Pmax_y)} %", f"{find_difference_of_2_variables(self.Vmax, graphs2.Vmax)} %"]
             ]
 
             self.table_data_stats = go.Table(
@@ -485,26 +495,31 @@ class Multiple_Dates_Analysis:
     def find_data_from_dates(self):
         # Initializing data for the graph
         unit_of_title = find_unit_of_title(self.slt_title)
-
-        grouped_data = self.flt_data.groupby(['Set order', 'Date'])[self.slt_title].mean().reset_index()
-
-        load_date_set = self.flt_data.groupby(['Date', 'Set order'])[load_title].max().reset_index()
-
-        load_dict = load_date_set.set_index(['Date', 'Set order'])[load_title].to_dict()
-        grouped_data[load_title] = grouped_data.apply(lambda row: load_dict.get((row['Date'], row['Set order'])),
-                                                      axis=1)
-        grouped_data = grouped_data.sort_values(by=load_title, ascending=True)
-
-        unique_dates = grouped_data['Date'].unique()
+            #Filter the data to have a df of the date, load and the mean of the 3 best performances of this load and date
+        graph_infos = self.flt_data.groupby([load_title, 'Date'])[self.slt_title].nlargest(3).reset_index()
+        stats_infos = graph_infos
+        graph_infos = graph_infos.groupby([load_title, 'Date']).mean().reset_index()
 
         # Initializing colors for distinct display of the data
-        colors = ['#0072BD', '#4DBEEE', '#B0E0E6', '#A2142F', '#ED553B', '#FFAC9F', '#007F3F', '#2ECC40', '#9ACD32']
-        date_to_color = {date: colors[i % len(colors)] for i, date in enumerate(unique_dates)}
+        colors = [
+    '#E0FFFF', '#008080', '#003333',  # Teintes de cyan
+    '#87CEEB', '#00A9A9', '#006666',  # Teintes de bleu
+    '#E6E6FA', '#9370DB', '#4B0082',  # Teintes de violet
+    '#00FF7F', '#3CB371', '#008000',  # Teintes de vert
+    '#FF6347', '#FF4500', '#8B0000',  # Teintes d'orange
+    '#FFD700', '#FFB90F', '#DAA520',  # Teintes de jaune
+    '#FFC0CB', '#FF69B4', '#DB7093',  # Teintes de rose
+    '#F0E68C', '#DAA520', '#B8860B'   # Teintes d'or
+]
+        unique_loads = graph_infos[load_title].unique()
+        load_colors = colors[:len(unique_loads)]  # Utiliser autant de couleurs que de charges uniques
 
-        grouped_data['Color'] = grouped_data['Date'].map(date_to_color)
+        load_to_color = {load: color for load, color in zip(unique_loads, load_colors)}
+
+        graph_infos['Color'] = graph_infos[load_title].map(load_to_color)
+        graph_infos['LegendGroup'] = graph_infos['Color'].apply(lambda color: str(color))
 
         # Initializing data for the infos table
-        grouped_by_charge = grouped_data.groupby(load_title)
         improvement_values = []
         perf_differences = []
         effect_sizes = []
@@ -512,64 +527,78 @@ class Multiple_Dates_Analysis:
         effect_size_titles = []
         obj_performance = []
 
-        # Analysing data from the two best performances/find the Cohen effect/SWC
-        for _, group in grouped_by_charge:
-            if len(group) > 2:
 
-                top_2_performances = group.nlargest(2, self.slt_title)[self.slt_title].values
+        for _, group in stats_infos.groupby(load_title):
+            s = group[self.slt_title].std()
+            s = round(s * 0.2, 2)
+            SWC.append(s)
+        SWC = np.mean(SWC)
+
+        # Analysing data from the two best performances/find the Cohen effect/SWC
+        for _, group in stats_infos.groupby(load_title):
+            if len(group.groupby(['Date'])) > 2:
+
+                mean_of_session = group.groupby(['Date']).mean().reset_index()
+                top_2_performances = mean_of_session.nlargest(2, self.slt_title)[self.slt_title].values
                 perf_diff = top_2_performances.max() - top_2_performances.min()
                 improvement = round(perf_diff / top_2_performances[1] * 100, 2)
 
-                s = group[self.slt_title].std()
+
                 effect_size = perf_diff
                 effect_sizes.append(round(effect_size, 2))
-                effect_size_titles.append(self.find_Cohen_interpretation(effect_size, s))
-                s = round(s * 0.2, 2)
-                SWC.append(s)
-                obj_performance.append(round(s + top_2_performances.max(), 2))
+                effect_size_titles.append(self.find_Cohen_interpretation(effect_size, SWC))
+
+                obj_performance.append(round(SWC + top_2_performances.max(), 2))
             else:
                 improvement = 'Pas assez de valeurs'
                 perf_diff = 0
                 effect_sizes.append("-")
                 effect_size_titles.append("-")
-                SWC.append("-")
                 obj_performance.append("-")
             improvement_values.append(improvement)
             perf_differences.append(round(perf_diff, 2))
-
         perf_changes_combined = [f"{pourcentage} ({original_unit})" for pourcentage, original_unit in
                                  zip(improvement_values, perf_differences)]
 
-        hovertemplate = f'Date: %{{customdata|%Y-%m-%d}}<br>#séries: %{{text}}<br>Charge [{find_unit_of_title(load_title)}]: %{{x}} <br>' + self.slt_title + ': %{y}<extra></extra>'
+        hovertemplate = f'Date: %{{x|%Y-%m-%d}}<br>Charge [{find_unit_of_title(load_title)}]: %{{customdata}} <br>' + self.slt_title + ': %{y:.2f}<extra></extra>'
 
         fig_combined = go.Figure()
-        fig_combined.add_trace(go.Scatter(
-            x=grouped_data[load_title],
-            y=grouped_data[self.slt_title],
-            mode='markers',
-            marker=dict(
-                color=grouped_data['Color'],
-                size=8,
-                line=dict(width=1, color='black'),
-            ),
-            hovertemplate=hovertemplate,
-            text=grouped_data['Set order'],
-            customdata=grouped_data['Date'],
-        ))
+        unique_loads = graph_infos[load_title].unique()
+
+        for load in unique_loads:
+            load_data = graph_infos[graph_infos[load_title] == load]
+
+            fig_combined.add_trace(go.Scatter(
+                x=load_data['Date'],
+                y=load_data[self.slt_title],
+                mode='markers',
+                marker=dict(
+                    color=load_data['Color'],
+                    size=8,
+                    line=dict(width=1, color='black'),
+                ),
+                showlegend=True,
+                legendgroup=str(load_data['LegendGroup'].iloc[0]),
+                # Utiliser le premier élément de LegendGroup pour regrouper les traces
+                name=f"Charge {round(load,2)} ({find_unit_of_title(load_title)})",
+                hovertemplate=hovertemplate,
+                customdata=load_data[load_title],
+            ))
+
         fig_combined.update_layout(
             title=f"{self.user}, {selected_exercice_DA}, {self.slt_title}",
-            xaxis_title=f'Charge {find_unit_of_title(load_title)}',
+            xaxis_title=f'Date',
             yaxis_title=self.slt_title,
+            legend=dict(title=load_title),
         )
-
+        rounded_unique_loads = [round(value, 2) for value in graph_infos[load_title].unique()]
         improvement_table = go.Figure(data=go.Table(
-            header=dict(values=[f'Charge {find_unit_of_title(load_title)}', f"Changement dans la performance (%,({unit_of_title}))",
-                                f"Le plut petit changement significatif (SWC) ({unit_of_title})", 'Taille de Cohen',
+            header=dict(values=[f'Charge ({find_unit_of_title(load_title)})', f"Changement dans la performance (%,({unit_of_title}))"
+                                , "Taille d'effet",
                                 f"Objectif de performance ({unit_of_title})"]),
             cells=dict(values=[
-                grouped_data[load_title].unique(),
+                rounded_unique_loads,
                 perf_changes_combined,
-                SWC,
                 effect_size_titles,
                 obj_performance
             ])
@@ -607,10 +636,12 @@ if upload_file is not None:
     main_title.empty()
     try:
         df = pd.read_table(upload_file)
+            #Remove columns
         columns_to_drop = ['Total volume', 'Maximum load']
         for col in df.columns:
             if any(word in col for word in columns_to_drop):
-                filtered_df = df.drop(columns=[col])
+                df = df.drop(columns=[col])
+            #Find wich type of unit the df use
         load_title = df.filter(like='Load').columns[0]
         estimated_1RM_title = df.filter(like='Estimated 1RM').columns[0]
         if "lb" in find_unit_of_title(estimated_1RM_title):
@@ -618,8 +649,17 @@ if upload_file is not None:
         else :
             df_in_kg = True
         df['Date'] = pd.to_datetime(df['Date'])
-
         titres = df.columns.tolist()
+
+            #Filter illogical data
+        df = df.replace(0, None)
+        for col in df.select_dtypes(include=['number']).columns:
+            if col not in ['Date', 'Time', 'User', 'Exercise']:
+                df[col] = remove_outliers(df[col])
+
+
+
+
 
         exp_parametre = st.sidebar.expander("Paramètres")
         if exp_parametre.expanded:
@@ -737,21 +777,11 @@ if upload_file is not None:
                      title].notnull().any()],
                 key="Title_AD"
             )
-            selected_start_date = exp_detail_analysis.selectbox('Date de début',
-                                                                options=[date.strftime('%Y-%m-%d') for date in df[
-                                                                    (df['User'] == selected_user_DA) & (df[
-                                                                                                            'Exercise'] == selected_exercice_DA)][
-                                                                    'Date'].unique()], key="Start_date_AD")
-            min_end_date = df[(df['User'] == selected_user_DA) & (df['Exercise'] == selected_exercice_DA) & (
-                    df['Date'] >= pd.to_datetime(selected_start_date))]['Date'].min()
-            selected_end_date = exp_detail_analysis.selectbox('Date de fin',
-                                                              options=[date.strftime('%Y-%m-%d') for date in df[
-                                                                  (df['User'] == selected_user_DA) & (df[
-                                                                                                          'Exercise'] == selected_exercice_DA) & (
-                                                                          df['Date'] >= min_end_date)][
-                                                                  'Date'].unique()], key="End_date_AD")
-            start_date = datetime.combine(pd.to_datetime(selected_start_date), datetime.min.time()).date()
-            end_date = datetime.combine(pd.to_datetime(selected_end_date), datetime.max.time()).date()
+            filtered_df_data_DA = df[(df['User'] == selected_user_DA) & (df['Exercise'] == selected_exercice_DA)]
+
+            # Trouver la date minimale et la date maximale dans le dataframe filtré
+            start_date = filtered_df_data_DA['Date'].min()
+            end_date = filtered_df_data_DA['Date'].max()
 
             # Button to add the graph
             if exp_detail_analysis.button("Ajouter un graphique", key='bt_add_graph_DA'):
@@ -794,7 +824,7 @@ if upload_file is not None:
                 filtered_df = df[
                     (df['User'] == selected_user_session) & (df['Exercise'] == selected_exercice_session) & (
                             df['Date'] == selected_date_single_session)].dropna(axis=1, how='all')
-                columns_to_drop = ['Date', 'Time', 'User', 'Exercise', 'Total volume', 'Maximum load']
+                columns_to_drop = ['Date', 'Time', 'User', 'Exercise']
                 for col in filtered_df.columns:
                     if any(word in col for word in columns_to_drop):
                         filtered_df = filtered_df.drop(columns=[col])
@@ -815,3 +845,4 @@ else:
         "https://github.com/killmotion2/ProfilePuissanceTC/blob/main/Logo_Tennis_Canada.png?raw=true", width=100)
     main_title.header("Analyse du profil de puissance des athlètes de tennis")
     st.sidebar.warning("Veuillez télécharger un fichier TSV valide.")
+
