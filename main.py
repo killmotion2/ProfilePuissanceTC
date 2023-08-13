@@ -312,7 +312,7 @@ class ForceVelocityCurve:
         )
         #Warning if data is minimal
         if len(mean_velocity_x) < 10:
-            st.warning(f"Attention : Le nombre de données utilisées pour créer le graphique de {self.selected_user} ({self.strt_date.date()}/{self.end_date.date()}) est limité. Les résultats pourraient ne pas être aussi précis.", icon="⚠️")
+            st.warning(f"Attention : Le nombre de données utilisées pour créer le graphique de {self.selected_user} ({self.strt_date.date()}/{self.end_date.date()}) est limité. Les résultats pourraient être imprécis.", icon="⚠️")
         self.figure = figFV
 
     def create_fv_zone_infos(self, fv_selectbox_choice):
