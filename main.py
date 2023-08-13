@@ -393,7 +393,7 @@ class ForceVelocityCurve:
 
             self.table_data_recommandation = go.Table(
                 header=dict(
-                    values=["Recommandations",
+                    values=["Recommandations sur le type d'entraînement choisi",
                             f"{create_acronym(self.selected_user)} ({self.strt_date.date()}/{self.end_date.date()})"]),
                 cells=dict(values=info_table_recommandations))
 
