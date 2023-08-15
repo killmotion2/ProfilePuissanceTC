@@ -157,6 +157,8 @@ class ForceVelocityCurve:
         self.SEE = None
         self.FV_trend_x = None
         self.FV_trend_y = None
+        self.F1RM_x = None
+        self.F1RM_y = None
         self.Pmax_y = None
         self.Pmax_x = None
         self.Fmax = None
@@ -192,7 +194,22 @@ class ForceVelocityCurve:
 
     def equation(self, x, a, b):
         return a * x + b
-
+    def find_V1RM_of_exercice(self):
+        exo = self.selected_exercice
+        V1RM = None
+        if "Pull" in exo or "Row" in exo or "Tirade" in exo: V1RM = 0.4
+        elif "Squat" in exo: V1RM = 0.30
+        elif "Deadlift" in exo: V1RM = 0.15
+        elif exo == "Bench press": V1RM = 0.17
+        elif exo == "Prone bench pull": V1RM = 0.50
+        elif exo == "Pull-up": V1RM = 0.23
+        elif exo == "Seated military press": V1RM = 0.19
+        elif exo == "Lat pulldown" : V1RM = 0.47
+        elif exo == "Seated cable row": V1RM = 0.40
+        elif exo == "Hip thrust" : V1RM = 0.25
+        elif exo == "Leg press" : V1RM = 0.21
+        else: V1RM = 0.3
+        return V1RM
     def create_fv_graph(self):
         # Get lists of infos for FV graph
         each_set = self.flt_data['Set order'].unique()
@@ -222,6 +239,7 @@ class ForceVelocityCurve:
         is_LB_exercice_pull = any(exo in self.selected_exercice.lower() for exo in exercice_LB_pull)
         is_LB_exercice_push = any(exo in self.selected_exercice.lower() for exo in exercice_LB_push)
         self.is_type_of_exercice = [is_UB_exercice_pull, is_UB_exercice_push, is_LB_exercice_pull, is_LB_exercice_push]
+        self.F1RM_x = self.find_V1RM_of_exercice()
 
         hovertemplate = f'Vitesse: %{{x:.2f}} m/s <br> Charges: %{{y:.2f}} {find_unit_of_title(load_title)}'
         figFV = go.Figure(
@@ -251,6 +269,7 @@ class ForceVelocityCurve:
         # Trouver l'indice du maximum de vitesse et maximum de force de la courbe FV
         self.Vmax =  max(self.FV_trend_x)
         self.Fmax = max(self.FV_trend_y)
+        self.F1RM_y = self.equation(self.F1RM_x, *popt[0])
 
 
 
@@ -294,7 +313,7 @@ class ForceVelocityCurve:
 
 
         #Ajout du 1RM et Pmax dans le graphique
-        figFV.add_trace(go.Scatter(x=[0, self.Pmax_x, self.Vmax], y=[self.Fmax, self.Pmax_y, 0],
+        figFV.add_trace(go.Scatter(x=[0, self.F1RM_x,self.Pmax_x, self.Vmax], y=[self.Fmax,self.F1RM_y, self.Pmax_y, 0],
                                    mode='markers',
                                    marker=dict(symbol=1, size=7),
                                    name="Fmax/Pmax/Vmax"))
@@ -323,7 +342,7 @@ class ForceVelocityCurve:
             v_min, v_max = 0, 0
             if self.is_type_of_exercice[0] or self.is_type_of_exercice[1]:
                 if fv_selectbox_choice == "Force absolue":
-                    v_min, v_max = 0.15, 0.75
+                    v_min, v_max = self.F1RM_x, 0.75
                 elif fv_selectbox_choice == "Force-vitesse":
                     v_min, v_max = 0.75, 1
                 elif fv_selectbox_choice == "Vitesse-force":
@@ -332,7 +351,7 @@ class ForceVelocityCurve:
                     v_min, v_max = 1.3, 1.5
             elif self.is_type_of_exercice[2] or self.is_type_of_exercice[3]:
                 if fv_selectbox_choice == "Force absolue":
-                    v_min, v_max = 0.3, 0.75
+                    v_min, v_max = self.F1RM_x, 0.75
                 elif fv_selectbox_choice == "Force-vitesse":
                     v_min, v_max = 0.75, 1
                 elif fv_selectbox_choice == "Vitesse-force":
@@ -341,7 +360,7 @@ class ForceVelocityCurve:
                     v_min, v_max = 1.3, 1.8
             else:
                 if fv_selectbox_choice == "Force absolue":
-                    v_min, v_max = 0.3, 0.75
+                    v_min, v_max = self.F1RM_x, 0.75
                 elif fv_selectbox_choice == "Force-vitesse":
                     v_min, v_max = 0.75, 1
                 elif fv_selectbox_choice == "Vitesse-force":
@@ -366,11 +385,12 @@ class ForceVelocityCurve:
 
             # Construction of the infos table
             info_table_stats = [
-                ["Équation", "R<sup>2</sup>","Erreur de l'estimation", "Force max ","Puissance max","Vitesse max"],
+                ["Équation", "R<sup>2</sup>","Erreur de l'estimation", "Force max", "1RM","Puissance max","Vitesse max"],
                 [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}",
                  f"{self.R2:.2f}",
                  f"\u00B1{self.SEE:.2f} ({find_unit_of_title(load_title)})",
                  f"{round(self.Fmax)} ({find_unit_of_title(load_title)})",
+                 f"{round(self.F1RM_y)} ({find_unit_of_title(load_title)})",
                  f"{round(self.Pmax_y)} (W) (à {round(self.Pmax_x,2)} m/s)",
                  f"{round(self.Vmax,2)} (m/s)"]]
 
@@ -438,10 +458,10 @@ class ForceVelocityCurve:
             )
             # Create the statistic infos table
             info_table = [
-                ["Équation", "R2", "Erreur de l'estimation","Force max", "Puissance max", "Vitesse max"],
-                [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}", f"{self.R2:.2f}",f"\u00B1{self.SEE:.2f} ({find_unit_of_title(load_title)})", f"{round(self.Fmax,2)} ({find_unit_of_title(load_title)})", f"{round(self.Pmax_y)} (W) (à {round(self.Pmax_x,2)} m/s)", f"{round(self.Vmax, 2)} (m/s)"],
-                [f"{graphs2.popt[0]:.2f}x + {graphs2.popt[1]:.2f}", f"{graphs2.R2:.2f}",f"\u00B1{graphs2.SEE:.2f} ({find_unit_of_title(load_title)})",f"{round(graphs2.Fmax)} ({find_unit_of_title(load_title)})", f"{round(graphs2.Pmax_y)} (W) (à {round(graphs2.Pmax_x,2)} m/s)", f"{round(graphs2.Vmax, 2)} (m/s)"],
-                ["-","-","-", f"{find_difference_of_2_variables(graphs2.Fmax,self.Fmax)} %", f"{find_difference_of_2_variables(self.Pmax_y, graphs2.Pmax_y)} %", f"{find_difference_of_2_variables(self.Vmax, graphs2.Vmax)} %"]
+                ["Équation", "R2", "Erreur de l'estimation","Force max (V = 0)", "1RM","Puissance max", "Vitesse max (F = 0)"],
+                [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}", f"{self.R2:.2f}",f"\u00B1{self.SEE:.2f} ({find_unit_of_title(load_title)})", f"{round(self.Fmax,2)} ({find_unit_of_title(load_title)})",f"{round(self.F1RM_y,2)} ({find_unit_of_title(load_title)})", f"{round(self.Pmax_y)} (W) (à {round(self.Pmax_x,2)} m/s)", f"{round(self.Vmax, 2)} (m/s)"],
+                [f"{graphs2.popt[0]:.2f}x + {graphs2.popt[1]:.2f}", f"{graphs2.R2:.2f}",f"\u00B1{graphs2.SEE:.2f} ({find_unit_of_title(load_title)})",f"{round(graphs2.Fmax)} ({find_unit_of_title(load_title)})",f"{round(graphs2.F1RM_y,2)} ({find_unit_of_title(load_title)})", f"{round(graphs2.Pmax_y)} (W) (à {round(graphs2.Pmax_x,2)} m/s)", f"{round(graphs2.Vmax, 2)} (m/s)"],
+                ["-","-","-", f"{find_difference_of_2_variables(graphs2.Fmax,self.Fmax)} %",f"{find_difference_of_2_variables(graphs2.F1RM_y,self.F1RM_y)} %",  f"{find_difference_of_2_variables(self.Pmax_y, graphs2.Pmax_y)} %", f"{find_difference_of_2_variables(self.Vmax, graphs2.Vmax)} %"]
             ]
 
             self.table_data_stats = go.Table(
