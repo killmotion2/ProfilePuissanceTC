@@ -385,7 +385,7 @@ class ForceVelocityCurve:
 
             # Construction of the infos table
             info_table_stats = [
-                ["Équation", "R<sup>2</sup>","Erreur de l'estimation", "Force max", "1RM","Puissance max","Vitesse max"],
+                ["Équation", "R<sup>2</sup>","Erreur de l'estimation", "F-zéro", "1RM","Pmax","V-zéro"],
                 [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}",
                  f"{self.R2:.2f}",
                  f"\u00B1{self.SEE:.2f} ({find_unit_of_title(load_title)})",
@@ -458,7 +458,7 @@ class ForceVelocityCurve:
             )
             # Create the statistic infos table
             info_table = [
-                ["Équation", "R2", "Erreur de l'estimation","Force max (V = 0)", "1RM","Puissance max", "Vitesse max (F = 0)"],
+                ["Équation", "R2", "Erreur de l'estimation","F-zéro", "1RM","Pmax", "V-zéro"],
                 [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}", f"{self.R2:.2f}",f"\u00B1{self.SEE:.2f} ({find_unit_of_title(load_title)})", f"{round(self.Fmax,2)} ({find_unit_of_title(load_title)})",f"{round(self.F1RM_y,2)} ({find_unit_of_title(load_title)})", f"{round(self.Pmax_y)} (W) (à {round(self.Pmax_x,2)} m/s)", f"{round(self.Vmax, 2)} (m/s)"],
                 [f"{graphs2.popt[0]:.2f}x + {graphs2.popt[1]:.2f}", f"{graphs2.R2:.2f}",f"\u00B1{graphs2.SEE:.2f} ({find_unit_of_title(load_title)})",f"{round(graphs2.Fmax)} ({find_unit_of_title(load_title)})",f"{round(graphs2.F1RM_y,2)} ({find_unit_of_title(load_title)})", f"{round(graphs2.Pmax_y)} (W) (à {round(graphs2.Pmax_x,2)} m/s)", f"{round(graphs2.Vmax, 2)} (m/s)"],
                 ["-","-","-", f"{find_difference_of_2_variables(graphs2.Fmax,self.Fmax)} %",f"{find_difference_of_2_variables(graphs2.F1RM_y,self.F1RM_y)} %",  f"{find_difference_of_2_variables(self.Pmax_y, graphs2.Pmax_y)} %", f"{find_difference_of_2_variables(self.Vmax, graphs2.Vmax)} %"]
