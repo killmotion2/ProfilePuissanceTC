@@ -97,7 +97,6 @@ def find_difference_of_2_variables(value1, value2):
     rounded_percentage = round(difference_percentage, 2)
     return rounded_percentage
 
-# Natural filter for df
 def remove_outliers(column):
     q1 = column.quantile(0.25)
     q3 = column.quantile(0.75)
@@ -223,10 +222,13 @@ class ForceVelocityCurve:
 
 
         grouped_data = self.flt_data.groupby([load_title, 'Date'])['Avg. velocity [m/s]'].mean().reset_index()
-
+        st.write(grouped_data)
         mean_velocity_x = [
-            grouped_data[grouped_data[load_title] == load_val]['Avg. velocity [m/s]'].mean().tolist()
-            for load_val in mean_force_y[:]]
+            grouped_data[grouped_data[load_title] == load_val]['Avg. velocity [m/s]'].mean()
+            for load_val in mean_force_y]
+
+        st.write(mean_velocity_x)
+
 
             #Check wich body part is working on this exercise
         exercice_UB_pull = ["Pull", "Row", "Tirade"]
@@ -666,10 +668,10 @@ if upload_file is not None:
         titres = df.columns.tolist()
 
             #Filter illogical data
-        df = df.replace(0, None)
-        for col in df.select_dtypes(include=['number']).columns:
-            if col not in ['Date', 'Time', 'User', 'Exercise']:
-                df[col] = remove_outliers(df[col])
+        #df = df.replace(0, None)
+        #for col in df.select_dtypes(include=['number']).columns:
+            #if col not in ['Date', 'Time', 'User', 'Exercise']:
+                #df[col] = remove_outliers(df[col])
 
 
 
