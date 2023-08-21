@@ -222,12 +222,12 @@ class ForceVelocityCurve:
 
 
         grouped_data = self.flt_data.groupby([load_title, 'Date'])['Avg. velocity [m/s]'].mean().reset_index()
-        st.write(grouped_data)
+
         mean_velocity_x = [
             grouped_data[grouped_data[load_title] == load_val]['Avg. velocity [m/s]'].mean()
             for load_val in mean_force_y]
 
-        st.write(mean_velocity_x)
+        
 
 
             #Check wich body part is working on this exercise
