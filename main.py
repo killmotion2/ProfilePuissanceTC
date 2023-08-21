@@ -93,7 +93,7 @@ def kg_to_lbs(kg_values):
     return round(lbs_values,2)
 
 def find_difference_of_2_variables(value1, value2):
-    difference_percentage = abs((value2 - value1) * 100 / min(abs(value2), abs(value1)))
+    difference_percentage = (value2 - value1) * 100 / min(abs(value2), abs(value1))
     rounded_percentage = round(difference_percentage, 2)
     return rounded_percentage
 
@@ -101,8 +101,8 @@ def remove_outliers(column):
     q1 = column.quantile(0.25)
     q3 = column.quantile(0.75)
     iqr = q3 - q1
-    lower_bound = q1 - 1.5 * iqr
-    upper_bound = q3 + 1.5 * iqr
+    lower_bound = q1 - 1.75 * iqr
+    upper_bound = q3 + 1.75 * iqr
     return column.apply(lambda x: None if x < lower_bound or x > upper_bound else x)
 
 
@@ -227,7 +227,13 @@ class ForceVelocityCurve:
             grouped_data[grouped_data[load_title] == load_val]['Avg. velocity [m/s]'].mean()
             for load_val in mean_force_y]
 
-        
+        #Filter the data to make sure there is not some None values
+        mean_velocity_x = [velocity for velocity in mean_velocity_x if not np.isnan(velocity)]
+        mean_force_y = [load_val for load_val in mean_force_y if not np.isnan(load_val)]
+        mean_force_y = [load_val for load_val, velocity in zip(mean_force_y, mean_velocity_x) if
+                                not np.isnan(velocity)]
+
+
 
 
             #Check wich body part is working on this exercise
@@ -458,19 +464,25 @@ class ForceVelocityCurve:
                 xaxis=dict(title='Vitesse (m/s)'),
                 legend=dict(orientation="h", x=0, y=-0.15)
             )
+            if self.end_date > graphs2.end_date:
+                recent_graph = self
+                old_graph = graphs2
+            else:
+                recent_graph = graphs2
+                old_graph = self
             # Create the statistic infos table
             info_table = [
                 ["Équation", "R2", "Erreur de l'estimation","F-zéro", "1RM","Pmax", "V-zéro"],
-                [f"{self.popt[0]:.2f}x + {self.popt[1]:.2f}", f"{self.R2:.2f}",f"\u00B1{self.SEE:.2f} ({find_unit_of_title(load_title)})", f"{round(self.Fmax,2)} ({find_unit_of_title(load_title)})",f"{round(self.F1RM_y,2)} ({find_unit_of_title(load_title)})", f"{round(self.Pmax_y)} (W) (à {round(self.Pmax_x,2)} m/s)", f"{round(self.Vmax, 2)} (m/s)"],
-                [f"{graphs2.popt[0]:.2f}x + {graphs2.popt[1]:.2f}", f"{graphs2.R2:.2f}",f"\u00B1{graphs2.SEE:.2f} ({find_unit_of_title(load_title)})",f"{round(graphs2.Fmax)} ({find_unit_of_title(load_title)})",f"{round(graphs2.F1RM_y,2)} ({find_unit_of_title(load_title)})", f"{round(graphs2.Pmax_y)} (W) (à {round(graphs2.Pmax_x,2)} m/s)", f"{round(graphs2.Vmax, 2)} (m/s)"],
-                ["-","-","-", f"{find_difference_of_2_variables(graphs2.Fmax,self.Fmax)} %",f"{find_difference_of_2_variables(graphs2.F1RM_y,self.F1RM_y)} %",  f"{find_difference_of_2_variables(self.Pmax_y, graphs2.Pmax_y)} %", f"{find_difference_of_2_variables(self.Vmax, graphs2.Vmax)} %"]
+                [f"{old_graph.popt[0]:.2f}x + {old_graph.popt[1]:.2f}", f"{old_graph.R2:.2f}",f"\u00B1{old_graph.SEE:.2f} ({find_unit_of_title(load_title)})", f"{round(old_graph.Fmax,2)} ({find_unit_of_title(load_title)})",f"{round(old_graph.F1RM_y,2)} ({find_unit_of_title(load_title)})", f"{round(old_graph.Pmax_y)} (W) (à {round(old_graph.Pmax_x,2)} m/s)", f"{round(old_graph.Vmax, 2)} (m/s)"],
+                [f"{recent_graph.popt[0]:.2f}x + {recent_graph.popt[1]:.2f}", f"{recent_graph.R2:.2f}",f"\u00B1{recent_graph.SEE:.2f} ({find_unit_of_title(load_title)})",f"{round(recent_graph.Fmax)} ({find_unit_of_title(load_title)})",f"{round(recent_graph.F1RM_y,2)} ({find_unit_of_title(load_title)})", f"{round(recent_graph.Pmax_y)} (W) (à {round(recent_graph.Pmax_x,2)} m/s)", f"{round(recent_graph.Vmax, 2)} (m/s)"],
+                ["-","-","-", f"{find_difference_of_2_variables(old_graph.Fmax,recent_graph.Fmax)} %",f"{find_difference_of_2_variables(old_graph.F1RM_y,recent_graph.F1RM_y)} %",  f"{find_difference_of_2_variables(old_graph.Pmax_y, recent_graph.Pmax_y)} %", f"{find_difference_of_2_variables(old_graph.Vmax, recent_graph.Vmax)} %"]
             ]
 
             self.table_data_stats = go.Table(
                 header=dict(
                     values=["Infos statistiques",
-                            f"{create_acronym(self.selected_user)} \n ({self.strt_date.date()} \n/ {self.end_date.date()})",
-                            f"{create_acronym(graphs2.selected_user)}\n ({graphs2.strt_date.date()}\n/ {graphs2.end_date.date()})","Différence (%)"]
+                            f"{create_acronym(old_graph.selected_user)} \n ({old_graph.strt_date.date()} \n/ {old_graph.end_date.date()})",
+                            f"{create_acronym(recent_graph.selected_user)}\n ({recent_graph.strt_date.date()}\n/ {recent_graph.end_date.date()})","Amélioration (%)"]
                 ),
                 cells=dict(values=info_table))
             self.table_data_recommandation = None
@@ -668,10 +680,10 @@ if upload_file is not None:
         titres = df.columns.tolist()
 
             #Filter illogical data
-        #df = df.replace(0, None)
-        #for col in df.select_dtypes(include=['number']).columns:
-            #if col not in ['Date', 'Time', 'User', 'Exercise']:
-                #df[col] = remove_outliers(df[col])
+        df = df.replace(0, None)
+        for col in df.select_dtypes(include=['number']).columns:
+            if col not in ['Date', 'Time', 'User', 'Exercise']:
+                df[col] = remove_outliers(df[col])
 
 
 
