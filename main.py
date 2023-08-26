@@ -51,17 +51,17 @@ Définitions des zones de vitesses:\n
 Référence: Mann, J. B. et al.(2015). Velocity-based training in football. Strength & Conditioning Journal, 37(6), 52-57. \n
 -Aide mémoire en lien avec l'analyse des données:
 1. L'équation de la relation force-vitesse peut être utile pour comparer un athlète à lui-même. Dans l'équation "Ax + B", plus le B est grand, plus le 1RM de l'athlète est élevé, tandis que plus le A est grand, moins l'athlète à de la faciliter à bouger des charges légères à de hautes vitesses. À titre indicatif, au tennis, il est préférable d'avoir un B élevé, et un A petit.
-2. Plus le R2 (coefficient de détermination) est grand, plus les points existants se collent à la droite. Grossièrement, plus le R2 se rapproche de 1, plus les points sont proches l'un de l'autre.
-3. Lorsqu'on compare deux relations, la partie "Diff. (lbs)" du graphique correspond à la différence EN ABSOLUE entre les deux relations choisies.
+2. Plus il existe de points et plus il existe des performances sur tout le continuum de l'axe de vitesse, plus la validité des prédictions va être élevée.
+3. Plus le R2 (coefficient de détermination) se rapproche de 1, plus les points existants se collent à la droite. 
+4. L'estimation de l'erreur correspond à la moyenne de l'erreur sur toute la relation charge-vitesse. 
 """
 txt_info_DA = """Cet onglet a pour but d'analyser l'évolution de l'athlète en fonction de la charge manipulée.\n
 - Aide mémoire en lien avec l'analyse de données:\n
-1. Plus le graphique a de valeurs, plus les données présenter dans le tableau (SWC et taille de Cohen) sont valide.
-2. Le plus petit changement significatif (SWC) représente le gain minimal à acquérir afin de considérer une amélioration significative dans la performance.
+1. Chaque point présenté dans le graphique équivault à la moyenne des trois meilleurs performances de chaque séance d'entrainement.
+2. La "différence de performance" correspond à la différence des deux meilleurs performances exécutées par l'athlète.
 3. La taille de Cohen est une façon de catégoriser l'effet de l'intervention. Les catégories sont les suivantes : Faible = 0.2* Écart-type, Modéré = 0.5 * ÉT, Grand = 0.8 * ÉT). Par exemple, après un cycle de puissance, mon athlète a amélioré sa vitesse maximale au squat avec une charge de 50lbs, passant de 1.3 à 1.4 m/s. Selon la taille de Cohen, cette amélioration est considéré comme 'faible' puisqu'il a eu seulement une augmentation de la vitesse de 0.1m/s."""
 
-txt_info_session = """Cet onglet a pour but d'afficher toutes les données recueillies par l'accéléromètre Enode à 
-l'aide d'un tableau.\n
+txt_info_session = """Cet onglet a pour but d'afficher toutes les données brutes recueillies par l'accéléromètre Enode, soit après le filtrage des données nulles et abérrantes.\n
 NB : Chaque ligne affiché représente les informations pour chaque répétition effectuée. Ainsi, il suffit de lire le tableau de gauche à droite pour suivre la progression de l'athlète dans son entraînement. """
 
 
