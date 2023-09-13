@@ -638,11 +638,12 @@ class Multiple_Dates_Analysis:
 
 
 class Session_dataframe:
-    def __init__(self, flt_data, user_name, exercice, date):
+    def __init__(self, flt_data, user_name, exercice, date, is_filter):
         self.data = self.reorganise_data(flt_data)
         self.name = user_name
         self.exercice = exercice
         self.date = date
+        self.is_filter = is_filter
 
     def reorganise_data(self, data_to_organise):
         first_columns = [load_title, 'Set order', 'Rep order']
@@ -650,7 +651,12 @@ class Session_dataframe:
         return data_to_organise.reindex(columns=first_columns + other_columns).reset_index()
 
     def show_dataframe(self):
-        st.subheader(f"{self.exercice}, {self.name} ({self.date})")
+        txt_is_filter = None
+        if self.is_filter:
+            txt_is_filter = "données filtrées"
+        else:
+            txt_is_filter = "données originales"
+        st.subheader(f"{self.exercice}, {self.name} ({self.date}), {txt_is_filter}")
         st.dataframe(self.data, use_container_width=True)
 
 
@@ -680,9 +686,10 @@ if upload_file is not None:
         titres = df.columns.tolist()
 
             #Filter illogical data
+        df_original = df
         df = df.replace(0, None)
         for col in df.select_dtypes(include=['number']).columns:
-            if col not in ['Date', 'Time', 'User', 'Exercise']:
+            if col not in ['Date', 'Time', 'User', 'Exercise', 'Load [lb]', 'Set order', 'Rep order']:
                 df[col] = remove_outliers(df[col])
 
 
@@ -848,10 +855,23 @@ if upload_file is not None:
                                                                                      'Date'].unique()],
                                                                         key="Single_date_session")
 
-            if exp_detail_session.button("Ajouter un graphique", key='bt_add_graph_session'):
+            if exp_detail_session.button("Ajouter un tableau (avec filtrage)", key='bt_add_graph_session_with_filter'):
                 filtered_df = df[
                     (df['User'] == selected_user_session) & (df['Exercise'] == selected_exercice_session) & (
                             df['Date'] == selected_date_single_session)].dropna(axis=1, how='all')
+                filtered_df.reset_index()
+                columns_to_drop = ['Date', 'Time', 'User', 'Exercise']
+                for col in filtered_df.columns:
+                    if any(word in col for word in columns_to_drop):
+                        filtered_df = filtered_df.drop(columns=[col])
+                st.session_state.dataframe_of_session.append(
+                    Session_dataframe(filtered_df, selected_user_session, selected_exercice_session,
+                                      selected_date_single_session, is_filter = True))
+            if exp_detail_session.button("Ajouter un tableau (sans filtrage)", key='bt_add_graph_session_without_filter'):
+                filtered_df = df_original[
+                    (df['User'] == selected_user_session) & (df['Exercise'] == selected_exercice_session) & (
+                            df['Date'] == selected_date_single_session)].dropna(axis=1, how='all')
+                filtered_df.reset_index()
                 columns_to_drop = ['Date', 'Time', 'User', 'Exercise']
                 for col in filtered_df.columns:
                     if any(word in col for word in columns_to_drop):
@@ -859,7 +879,7 @@ if upload_file is not None:
 
                 st.session_state.dataframe_of_session.append(
                     Session_dataframe(filtered_df, selected_user_session, selected_exercice_session,
-                                      selected_date_single_session))
+                                      selected_date_single_session, is_filter = False))
 
             graph_manager_tableau(st.session_state.dataframe_of_session, exp_detail_session)
             for g in st.session_state.dataframe_of_session:
@@ -873,4 +893,3 @@ else:
         "https://github.com/killmotion2/ProfilePuissanceTC/blob/main/Logo_Tennis_Canada.png?raw=true", width=100)
     main_title.header("Analyse du profil de puissance des athlètes de tennis")
     st.sidebar.warning("Veuillez télécharger un fichier TSV valide.")
-
