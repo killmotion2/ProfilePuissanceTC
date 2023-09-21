@@ -5,6 +5,7 @@ from plotly import graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
 import numpy as np
+import math
 from scipy.optimize import curve_fit
 import itertools
 from itertools import cycle
@@ -220,18 +221,24 @@ class ForceVelocityCurve:
             #Transform a list of lists in a simple list
         mean_force_y = list(itertools.chain(*mean_force_y))
 
+        # Calculez la moyenne de chaque groupe
+        grouped_data = self.flt_data.groupby([load_title, 'Date', 'Set order'])['Avg. velocity [m/s]'].nlargest(3).reset_index()
+        std_deviation_x = grouped_data.groupby([load_title, 'Date', 'Set order'])[
+            'Avg. velocity [m/s]'].std().reset_index()
+        grouped_data = grouped_data.groupby([load_title, 'Date', 'Set order'])['Avg. velocity [m/s]'].mean().reset_index()
 
-        grouped_data = self.flt_data.groupby([load_title, 'Date'])['Avg. velocity [m/s]'].mean().reset_index()
+        std_deviation_x = std_deviation_x['Avg. velocity [m/s]'].tolist()
+        mean_velocity_x = grouped_data['Avg. velocity [m/s]'].tolist()
 
-        mean_velocity_x = [
-            grouped_data[grouped_data[load_title] == load_val]['Avg. velocity [m/s]'].mean()
-            for load_val in mean_force_y]
 
-        #Filter the data to make sure there is not some None values
-        mean_velocity_x = [velocity for velocity in mean_velocity_x if not np.isnan(velocity)]
-        mean_force_y = [load_val for load_val in mean_force_y if not np.isnan(load_val)]
-        mean_force_y = [load_val for load_val, velocity in zip(mean_force_y, mean_velocity_x) if
-                                not np.isnan(velocity)]
+        mean_velocity_x = [v for v in mean_velocity_x if v is not None and not math.isnan(v)]
+        mean_force_y = mean_force_y[:len(mean_velocity_x)]
+        std_deviation_x = [v for v in std_deviation_x if v is not None and not math.isnan(v)]
+
+        st.write(grouped_data)
+        st.write(mean_force_y)
+        st.write(mean_velocity_x)
+        st.write(std_deviation_x)
 
 
 
