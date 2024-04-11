@@ -218,6 +218,7 @@ class ForceVelocityCurve:
             self.flt_data[self.flt_data['Set order'] == set][load_title].unique().tolist()
             for set in each_set
         ]
+
             #Transform a list of lists in a simple list
         mean_force_y = list(itertools.chain(*mean_force_y))
 
@@ -232,18 +233,15 @@ class ForceVelocityCurve:
 
 
         mean_velocity_x = [v for v in mean_velocity_x if v is not None and not math.isnan(v)]
-        mean_force_y = mean_force_y[:len(mean_velocity_x)]
+        length_mean_force_y = len([v for v in mean_force_y if v is not None and not math.isnan(v)])
+
+        # Ajuster la liste mean_velocity_x à la longueur de mean_force_y
+        mean_velocity_x = mean_velocity_x[:length_mean_force_y]
         std_deviation_x = [v for v in std_deviation_x if v is not None and not math.isnan(v)]
 
-        st.write(grouped_data)
-        st.write(mean_force_y)
-        st.write(mean_velocity_x)
-        st.write(std_deviation_x)
 
 
-
-
-            #Check wich body part is working on this exercise
+        #Check wich body part is working on this exercise
         exercice_UB_pull = ["Pull", "Row", "Tirade"]
         exercice_UB_push = ["Bench", "Press", "Push"]
         exercice_LB_pull = ["Deadlift", "Hip"]
@@ -262,6 +260,7 @@ class ForceVelocityCurve:
                             name=f" {create_acronym(self.selected_user)} \n, {self.selected_exercice}",
                             hovertemplate=hovertemplate)
         )
+
 
 
         # Code for estimation of equation and R2 of the FV relation
