@@ -142,7 +142,7 @@ def replace_column_titles(df):
 
 
 
-def translate_columns(df):
+def translate_columns(df): #--> je ne l'utilise pas dans l'appli, mais sert à traduire les titres (problèmes antérieur = traduisait incorectement les tires (mots pas au même endroit que le titre original))
     translated_columns = []
 
     # Si la traduction du premier titre est possible, traduire les colonnes
