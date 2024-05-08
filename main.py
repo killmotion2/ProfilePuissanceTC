@@ -1,7 +1,7 @@
 import re
 import streamlit as st
 import pandas as pd
-from deep_translator import GoogleTranslator
+#from deep_translator import GoogleTranslator
 from plotly import graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
@@ -146,8 +146,8 @@ def translate_columns(df): #--> je ne l'utilise pas dans l'appli, mais sert à t
     # Si la traduction du premier titre est possible, traduire les colonnes
     for col in df.columns:
         try:
-            translated_col = GoogleTranslator(source='auto', target='en').translate(col)
-            translated_columns.append(translated_col)
+            a=a+1 #translated_col = GoogleTranslator(source='auto', target='en').translate(col)
+            #translated_columns.append(translated_col)
         except Exception as e:
             st.error(f"Erreur de traduction : {e}")
             translated_columns.append(col)  # Ajoutez la colonne d'origine en cas d'erreur
