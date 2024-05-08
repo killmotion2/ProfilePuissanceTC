@@ -1,8 +1,6 @@
 import re
 import streamlit as st
 import pandas as pd
-#from translate import Translator
-from googletrans import Translator
 from deep_translator import GoogleTranslator
 from plotly import graph_objects as go
 from plotly.subplots import make_subplots
