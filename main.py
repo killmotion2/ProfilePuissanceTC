@@ -140,20 +140,7 @@ def replace_column_titles(df):
 
 
 
-def translate_columns(df): #--> je ne l'utilise pas dans l'appli, mais sert à traduire les titres (problèmes antérieur = traduisait incorectement les tires (mots pas au même endroit que le titre original))
-    translated_columns = []
 
-    # Si la traduction du premier titre est possible, traduire les colonnes
-    for col in df.columns:
-        try:
-            a=a+1 #translated_col = GoogleTranslator(source='auto', target='en').translate(col)
-            #translated_columns.append(translated_col)
-        except Exception as e:
-            st.error(f"Erreur de traduction : {e}")
-            translated_columns.append(col)  # Ajoutez la colonne d'origine en cas d'erreur
-
-
-    return translated_columns
 
 
 def create_acronym(name):
@@ -790,22 +777,13 @@ if upload_file is not None:
     emplacement_logo.empty()
     main_title.empty()
     try:
-        df = pd.read_table(upload_file)
+        df = pd.read_csv(upload_file, sep='\t')
 
+        df = df.replace(',', '.', regex=True)
+        df = df.apply(pd.to_numeric, errors='ignore')
+        #Check language, if in french --> convert the title manualy in english
         if any("utilisateur" in col.lower() for col in df.columns):
             replace_column_titles(df)
-        #if any("utilisateur" in col.lower() for col in df.columns):
-            #df.columns = translate_columns(df)
-            #for col in df.columns:
-                # Vérifier si la colonne contient "1RM estimated"
-             #   if "1RM estimated" in col:
-                    # Extraire l'unité de la colonne
-              #      unit_match = re.search(r'\[(.*?)\]', col)
-               #     if unit_match:
-                #        unit = unit_match.group(1)
-                        # Renommer la colonne avec "Estimated 1RM" et réinsérer l'unité
-                 #       new_col_name = f"Estimated 1RM [{unit}]"
-                  #      df.rename(columns={col: new_col_name}, inplace=True)
 
         # Remove columns
         columns_to_drop = ['Total volume', 'Maximum load']
@@ -816,7 +794,7 @@ if upload_file is not None:
         if df.columns.duplicated().any():
             df = df.loc[:, ~df.columns.duplicated()]
 
-
+        st.write(df)
         # Find wich type of unit the df use
         load_title = df.filter(like='Load').columns[0]
         estimated_1RM_title = df.filter(like='Estimated 1RM').columns[0]
