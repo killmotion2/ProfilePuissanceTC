@@ -794,7 +794,7 @@ if upload_file is not None:
         if df.columns.duplicated().any():
             df = df.loc[:, ~df.columns.duplicated()]
 
-        st.write(df)
+        
         # Find wich type of unit the df use
         load_title = df.filter(like='Load').columns[0]
         estimated_1RM_title = df.filter(like='Estimated 1RM').columns[0]
